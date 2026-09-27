@@ -70,7 +70,9 @@ section{display:flex;flex-direction:column;gap:12px}
 .range:last-of-type{border-bottom:0;padding-bottom:0}
 .range-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .range-fields .full{grid-column:1/-1}
-label{display:flex;flex-direction:column;gap:4px;font-size:.78rem;color:var(--muted);font-weight:500}
+label,.field{display:flex;flex-direction:column;gap:4px;font-size:.78rem;color:var(--muted);font-weight:500}
+.stepper button{touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.stepper button:active{background:var(--line)}
 select,input[type=number]{
   font:inherit;font-size:1rem;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);
   border-radius:10px;padding:10px 12px;width:100%;min-width:0;font-variant-numeric:tabular-nums
@@ -132,16 +134,16 @@ footer a{color:inherit}
     <h2>Repeats</h2>
     <div class="panel">
       <div class="row2">
-        <label for="perVerse">Each verse
-          <div class="stepper"><button type="button" data-step="perVerse" data-d="-1" aria-label="Fewer">−</button><input type="number" id="perVerse" min="1" max="50" value="2" inputmode="numeric"><button type="button" data-step="perVerse" data-d="1" aria-label="More">+</button></div>
-        </label>
-        <label for="rounds">Whole range
-          <div class="stepper"><button type="button" data-step="rounds" data-d="-1" aria-label="Fewer">−</button><input type="number" id="rounds" min="1" max="500" value="25" inputmode="numeric"><button type="button" data-step="rounds" data-d="1" aria-label="More">+</button></div>
-        </label>
+        <div class="field"><span class="flabel" id="lPerVerse">Each verse (times)</span>
+          <div class="stepper"><button type="button" data-step="perVerse" data-d="-1" aria-label="Fewer repeats of each verse">−</button><input type="number" id="perVerse" min="1" max="50" value="2" inputmode="numeric" aria-labelledby="lPerVerse"><button type="button" data-step="perVerse" data-d="1" aria-label="More repeats of each verse">+</button></div>
+        </div>
+        <div class="field"><span class="flabel" id="lRounds">Whole range (times)</span>
+          <div class="stepper"><button type="button" data-step="rounds" data-d="-1" aria-label="Fewer rounds">−</button><input type="number" id="rounds" min="1" max="500" value="25" inputmode="numeric" aria-labelledby="lRounds"><button type="button" data-step="rounds" data-d="1" aria-label="More rounds">+</button></div>
+        </div>
       </div>
       <div class="row2">
         <label for="gap">Pause between plays
-          <select id="gap"><option value="0">None</option><option value="1" selected>1 second</option><option value="2">2 seconds</option><option value="3">3 seconds</option><option value="5">5 seconds</option></select>
+          <select id="gap"><option value="0" selected>None (continuous)</option><option value="1">1 second</option><option value="2">2 seconds</option><option value="3">3 seconds</option><option value="5">5 seconds</option></select>
         </label>
         <label for="reciter">Reciter
           <select id="reciter">
@@ -163,7 +165,8 @@ footer a{color:inherit}
   <footer>Audio streamed from <a href="https://everyayah.com" target="_blank" rel="noopener">everyayah.com</a> · text from <a href="https://alquran.cloud" target="_blank" rel="noopener">alquran.cloud</a></footer>
 </div>
 
-<audio id="audio" preload="auto"></audio>
+<audio id="audioA" preload="auto"></audio>
+<audio id="audioB" preload="auto"></audio>
 
 <script>
 const SURAHS = [
@@ -181,7 +184,6 @@ const SURAHS = [
 ["Al-Masad",5],["Al-Ikhlas",4],["Al-Falaq",5],["An-Nas",6]
 ];
 const $ = id => document.getElementById(id);
-const audio = $("audio");
 const arNum = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
 const pad = (n, w=3) => String(n).padStart(w, "0");
 const store = {
@@ -210,10 +212,10 @@ function renderRanges(){
     const sel = el.querySelector("select"), f = el.querySelector(`#f${idx}`), t = el.querySelector(`#t${idx}`);
     sel.value = r.s; f.value = r.from; t.value = r.to;
     f.max = t.max = SURAHS[r.s-1][1];
-    sel.onchange = () => { r.s = +sel.value; r.from = 1; r.to = SURAHS[r.s-1][1]; renderRanges(); changed(); };
-    f.onchange = () => { r.from = +f.value; fixRange(r); renderRanges(); changed(); };
-    t.onchange = () => { r.to = +t.value; fixRange(r); renderRanges(); changed(); };
-    el.querySelector(".remove").onclick = () => { ranges.splice(idx,1); renderRanges(); changed(); };
+    sel.onchange = () => { r.s = +sel.value; r.from = 1; r.to = SURAHS[r.s-1][1]; renderRanges(); changed(true); };
+    f.onchange = () => { r.from = +f.value; fixRange(r); renderRanges(); changed(true); };
+    t.onchange = () => { r.to = +t.value; fixRange(r); renderRanges(); changed(true); };
+    el.querySelector(".remove").onclick = () => { ranges.splice(idx,1); renderRanges(); changed(true); };
   });
 }
 function fixRange(r){
@@ -226,20 +228,27 @@ $("addRange").onclick = () => {
   const last = ranges[ranges.length-1];
   const s = Math.min(114, last.s + 1);
   ranges.push({s, from:1, to:SURAHS[s-1][1]});
-  renderRanges(); changed();
+  renderRanges(); changed(true);
 };
-document.querySelectorAll("[data-step]").forEach(b => b.onclick = () => {
+document.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click", e => {
+  e.preventDefault();
   const inp = $(b.dataset.step);
   inp.value = Math.min(+inp.max, Math.max(+inp.min, (+inp.value||1) + +b.dataset.d));
-  changed();
+  changed(false);
+}));
+["perVerse","rounds"].forEach(id => {
+  $(id).addEventListener("input", () => { if ($(id).value !== "") changed(false, true); });
+  $(id).addEventListener("change", () => changed(false));
 });
-["perVerse","rounds","gap","reciter"].forEach(id => $(id).addEventListener("change", changed));
+$("gap").addEventListener("change", () => changed(false));
+$("reciter").addEventListener("change", () => changed(true));
 
 const saved = store.get("hl.opts");
 if (saved){ for (const k of ["perVerse","rounds","gap","reciter"]) if (saved[k]!=null) $(k).value = saved[k]; }
+if (!store.get("hl.v2")){ $("gap").value = "0"; store.set("hl.v2", 1); }
 
-function opts(){
-  const clamp = (id) => { const i=$(id); const v=Math.min(+i.max, Math.max(1, Math.round(+i.value)||1)); i.value=v; return v; };
+function opts(soft){
+  const clamp = (id) => { const i=$(id); const v=Math.min(+i.max, Math.max(1, Math.round(+i.value)||1)); if (!soft) i.value=v; return v; };
   return { perVerse: clamp("perVerse"), rounds: clamp("rounds"), gap: +$("gap").value, reciter: $("reciter").value };
 }
 function buildList(){
@@ -247,18 +256,32 @@ function buildList(){
   ranges.forEach(r => { for (let a=r.from; a<=r.to; a++) list.push({s:r.s, a}); });
   return list;
 }
-function changed(){
-  const o = opts();
+/* rangeChanged: what is recited changed (surah, verses, reciter).
+   Otherwise only repeat counts or the pause changed, which apply live. */
+function changed(rangeChanged, typing){
+  const o = opts(typing);
   store.set("hl.ranges", ranges); store.set("hl.opts", o);
-  const list = buildList();
-  const plays = list.length * o.perVerse * o.rounds;
-  $("summary").innerHTML = `<b>${list.length}</b> verse${list.length===1?"":"s"} × <b>${o.perVerse}</b> each × <b>${o.rounds}</b> rounds = <b>${plays.toLocaleString()}</b> plays`;
-  if (!playing && !started) resetState();
+  const newList = buildList();
+  const plays = newList.length * o.perVerse * o.rounds;
+  $("summary").innerHTML = `<b>${newList.length}</b> verse${newList.length===1?"":"s"} × <b>${o.perVerse}</b> each × <b>${o.rounds}</b> rounds = <b>${plays.toLocaleString()}</b> plays`;
+  if (!started){ resetState(); return; }
+  if (rangeChanged){
+    stopSession();
+    setStatus("Settings changed. Press play to start the new session.");
+    return;
+  }
+  // Repeat counts changed mid-session: keep going with the new numbers.
+  if (rep >= o.perVerse) rep = o.perVerse - 1;
+  if (round >= o.rounds) round = o.rounds - 1;
+  updateCounters();
+}
+function stopSession(){
+  clearTimeout(gapTimer); cur.pause(); nxt.pause(); setPlaying(false); resetState();
 }
 
 /* ---------- Playback ---------- */
 let list = [], i = 0, rep = 0, round = 0, playing = false, started = false, gapTimer = null, textCache = {};
-const O = () => opts();
+const O = () => opts(true);
 
 function urlFor(v){ return `https://everyayah.com/data/${O().reciter}/${pad(v.s)}${pad(v.a)}.mp3`; }
 
@@ -271,12 +294,7 @@ function showVerse(loadText=true){
   $("npSurah").textContent = SURAHS[v.s-1][0];
   $("npRef").textContent = started ? `Surah ${v.s}, verse ${v.a} · ${i+1} of ${list.length}` : `Ready · ${rangeLabel()}`;
   $("npNum").textContent = arNum(v.a);
-  $("cVerse").textContent = `${started?rep+1:0} / ${o.perVerse}`;
-  $("cRound").textContent = `${started?round+1:0} / ${o.rounds}`;
-  $("pips").innerHTML = o.perVerse <= 20 ? Array.from({length:o.perVerse},(_,k)=>`<span class="pip ${started&&k<=rep?"on":""}"></span>`).join("") : "";
-  const total = list.length * o.perVerse * o.rounds;
-  const done = ((round*list.length + i) * o.perVerse + rep);
-  $("progress").style.width = started ? `${(done/total*100).toFixed(2)}%` : "0";
+  updateCounters();
   if (loadText) loadAyahText(v); else { const t=$("npText"); t.className="arabic dim"; t.textContent="Press play to start."; }
   if ("mediaSession" in navigator){
     navigator.mediaSession.metadata = new MediaMetadata({
@@ -285,6 +303,15 @@ function showVerse(loadText=true){
       album: `Round ${round+1} of ${o.rounds} · repeat ${rep+1} of ${o.perVerse}`
     });
   }
+}
+function updateCounters(){
+  const o = opts(true);
+  $("cVerse").textContent = `${started?rep+1:0} / ${o.perVerse}`;
+  $("cRound").textContent = `${started?round+1:0} / ${o.rounds}`;
+  $("pips").innerHTML = o.perVerse <= 20 ? Array.from({length:o.perVerse},(_,k)=>`<span class="pip ${started&&k<=rep?"on":""}"></span>`).join("") : "";
+  const total = Math.max(1, list.length * o.perVerse * o.rounds);
+  const done = ((round*list.length + i) * o.perVerse + rep);
+  $("progress").style.width = started ? `${Math.min(100, done/total*100).toFixed(2)}%` : "0";
 }
 function rangeLabel(){
   return ranges.map(r => ranges.length===1 ? `verses ${r.from}–${r.to}` : `${r.s}:${r.from}–${r.to}`).join(", ");
@@ -311,20 +338,37 @@ function prefetchText(){
     textCache[key]=txt;
   }).catch(()=>{});
 }
-let preloader = null;
-function prefetchAudio(){
-  const n = list[(i+1) % list.length]; if (!n) return;
-  preloader = new Audio(); preloader.preload = "auto"; preloader.src = urlFor(n);
+/* Two audio players take turns: while one recites, the other has the
+   next verse already loaded, so it starts the instant the first ends. */
+let cur = $("audioA"), nxt = $("audioB");
+function prepare(el, v){
+  if (!v) return;
+  const src = urlFor(v);
+  if (el.dataset.src !== src){ el.dataset.src = src; el.src = src; el.load(); }
+}
+function peekNext(){
+  const o = O();
+  let r = rep + 1, k = i, rd = round;
+  if (r >= o.perVerse){ r = 0; k++; if (k >= list.length){ k = 0; rd++; if (rd >= o.rounds) return null; } }
+  return list[k];
 }
 function loadAndPlay(){
-  const v = list[i];
-  const src = urlFor(v);
+  const v = list[i], src = urlFor(v);
   setStatus("");
-  if (audio.src !== src){ audio.src = src; }
-  else { audio.currentTime = 0; }
+  clearTimeout(gapTimer);
+  if (cur.dataset.src !== src && nxt.dataset.src === src){
+    cur.pause();
+    [cur, nxt] = [nxt, cur];            // the other player already has this verse loaded
+  } else {
+    prepare(cur, v);
+  }
+  try{ cur.currentTime = 0; }catch(e){}
   showVerse(true);
-  audio.play().catch(err => { if (err.name !== "AbortError") { setStatus("Tap play to continue.", false); setPlaying(false); } });
-  if (rep === 0) prefetchAudio();
+  cur.play().catch(err => {
+    if (err.name === "AbortError") return;
+    setStatus("Tap play to continue.", false); setPlaying(false);
+  });
+  prepare(nxt, peekNext());              // load the next verse in the background now
 }
 function advance(){
   const o = O();
@@ -333,9 +377,7 @@ function advance(){
     rep = 0; i++;
     if (i >= list.length){
       i = 0; round++;
-      if (round >= o.rounds){
-        finish(); return;
-      }
+      if (round >= o.rounds){ finish(); return; }
     }
   }
   loadAndPlay();
@@ -348,19 +390,21 @@ function finish(){
   setStatus(`Done — ${rangeLabel()} completed ${o.rounds} times. بارك الله فيك`, false);
   i = 0; rep = 0; round = 0;
 }
-audio.addEventListener("ended", () => {
-  if (!playing) return;
-  const g = O().gap;
-  if (g > 0){ gapTimer = setTimeout(advance, g*1000); } else advance();
+[$("audioA"), $("audioB")].forEach(el => {
+  el.addEventListener("ended", () => {
+    if (el !== cur || !playing) return;
+    const g = O().gap;
+    if (g > 0){ gapTimer = setTimeout(advance, g*1000); } else advance();
+  });
+  el.addEventListener("error", () => {
+    if (el !== cur || !playing) return;
+    const v = list[i];
+    setStatus(`Couldn't load ${v.s}:${v.a}. Check your connection, then press play.`, true);
+    setPlaying(false);
+  });
+  el.addEventListener("waiting", () => { if (el === cur && playing) setStatus("Loading…"); });
+  el.addEventListener("playing", () => { if (el === cur) setStatus(""); });
 });
-audio.addEventListener("error", () => {
-  if (!playing) return;
-  const v = list[i];
-  setStatus(`Couldn't load ${v.s}:${v.a}. Check your connection, then press play.`, true);
-  setPlaying(false);
-});
-audio.addEventListener("waiting", () => { if (playing) setStatus("Loading…"); });
-audio.addEventListener("playing", () => setStatus(""));
 
 function setStatus(msg, err=false){ const s=$("status"); s.textContent=msg; s.className = "status" + (err?" err":""); }
 function setPlaying(p){
@@ -370,18 +414,36 @@ function setPlaying(p){
   if ("mediaSession" in navigator) navigator.mediaSession.playbackState = p ? "playing" : "paused";
   if (p) requestWake(); else releaseWake();
 }
-function play(){
-  if (!started){ list = buildList(); if (!list.length) return; i = 0; rep = 0; round = 0; started = true; setPlaying(true); loadAndPlay(); return; }
-  setPlaying(true);
-  if (audio.ended || !audio.src) loadAndPlay();
-  else audio.play().catch(()=>setPlaying(false));
+/* Phones only let audio start from a tap, so on the first tap we briefly
+   start and stop the second player too; after that it can take over by itself. */
+let unlocked = false;
+function unlockSecondPlayer(){
+  if (unlocked) return; unlocked = true;
+  const other = nxt;
+  if (!other.src) return;
+  other.muted = true;
+  const p = other.play();
+  if (p && p.then) p.then(() => { other.pause(); other.currentTime = 0; other.muted = false; })
+                   .catch(() => { other.muted = false; });
+  else { other.pause(); other.muted = false; }
 }
-function pause(){ clearTimeout(gapTimer); audio.pause(); setPlaying(false); }
+function play(){
+  if (!started){
+    list = buildList(); if (!list.length) return;
+    i = 0; rep = 0; round = 0; started = true; setPlaying(true);
+    loadAndPlay(); unlockSecondPlayer(); return;
+  }
+  setPlaying(true);
+  if (cur.ended || !cur.src) loadAndPlay();
+  else cur.play().catch(()=>setPlaying(false));
+  unlockSecondPlayer();
+}
+function pause(){ clearTimeout(gapTimer); cur.pause(); setPlaying(false); }
 function jump(d){
   if (!started){ list = buildList(); started = true; }
   clearTimeout(gapTimer);
   i = (i + d + list.length) % list.length; rep = 0;
-  if (playing) loadAndPlay(); else { audio.src = urlFor(list[i]); showVerse(true); }
+  if (playing) loadAndPlay(); else { cur.pause(); prepare(cur, list[i]); prepare(nxt, peekNext()); showVerse(true); }
 }
 $("btnPlay").onclick = () => playing ? pause() : play();
 $("btnPrev").onclick = () => jump(-1);
