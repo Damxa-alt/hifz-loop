@@ -88,21 +88,15 @@ button:focus-visible,select:focus-visible,input:focus-visible,.ayah:focus-visibl
 .status{font-size:.82rem;text-align:center;opacity:.9}
 .status:empty{display:none}
 .status.err{color:#FFD2C8;opacity:1}
-
-/* Recite & Check */
-.mode-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
-.mode-btn{appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:10px;padding:11px 8px;font-weight:600;cursor:pointer}
-.mode-btn.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.mode-note{font-size:.82rem;color:var(--muted);line-height:1.45}
-.recite-card{max-width:680px;margin:0 auto 16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 16px}
-.recite-card h3{margin-bottom:7px;color:var(--accent)}
-.recite-heard{direction:rtl;text-align:right;font-family:"Amiri Quran","Amiri",serif;font-size:1.15rem;min-height:1.8em;color:var(--ink)}
-.recite-feedback{font-size:.88rem;color:var(--muted);margin-top:7px}
-.recite-feedback.warn{color:var(--danger);font-weight:600}
-.recite-feedback.good{color:var(--accent);font-weight:600}
-.recite-actions{display:flex;gap:8px;margin-top:10px}
-.recite-actions button{appearance:none;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:10px;padding:9px 12px;font-weight:600;cursor:pointer}
-.mic-live{box-shadow:0 0 0 5px rgba(255,255,255,.16)}
+.recitebar{display:flex;gap:8px;justify-content:center;align-items:center;flex-wrap:wrap}
+.testbtn{appearance:none;border:1px solid rgba(255,255,255,.28);background:rgba(255,255,255,.12);color:inherit;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer}
+.testbtn.on{background:var(--brass);color:#fff;border-color:transparent}
+.testbtn:disabled{opacity:.45;cursor:not-allowed}
+.recite-status{font-size:.8rem;text-align:center;min-height:1.2em;opacity:.95}
+.recite-status.bad{color:#FFD2C8;font-weight:700}
+.recite-status.good{color:#D8FFE9}
+.ayah.recite-target{outline:2px solid var(--brass);outline-offset:3px}
+.ayah.recite-error{background:#FFD9D3!important;color:#6E1F15!important}
 
 /* Settings sheet */
 .sheet-back{position:fixed;inset:0;z-index:10;background:rgba(6,14,13,.45);display:flex;align-items:flex-end;justify-content:center}
@@ -156,13 +150,6 @@ select,input[type=number]{
 
 <main class="page" id="verses" aria-live="off"></main>
 
-<div class="recite-card" id="reciteCard" hidden>
-  <h3>Recite & Check</h3>
-  <div class="recite-heard" id="heardText">Tap the microphone and begin reciting.</div>
-  <div class="recite-feedback" id="reciteFeedback">Checks word sequence only — not Tajweed, madd, pacing, or pronunciation quality.</div>
-  <div class="recite-actions"><button id="hearVerse" type="button">Hear this verse</button><button id="clearRecite" type="button">Start verse again</button></div>
-</div>
-
 <div class="player" aria-live="polite">
   <div class="player-in">
     <div class="bar" aria-hidden="true"><i id="progress"></i></div>
@@ -178,6 +165,8 @@ select,input[type=number]{
       </div>
     </div>
     <div class="status" id="status"></div>
+    <div class="recitebar"><button class="testbtn" id="btnRecite" type="button">🎙 Recite &amp; Check</button><button class="testbtn" id="btnHelp" type="button" disabled>Help me</button></div>
+    <div class="recite-status" id="reciteStatus"></div>
   </div>
 </div>
 
@@ -192,17 +181,6 @@ select,input[type=number]{
       <h3>What to recite</h3>
       <div class="panel" id="ranges"></div>
       <button class="add" id="addRange">+ Add another range</button>
-    </section>
-
-    <section>
-      <h3>Mode</h3>
-      <div class="panel">
-        <div class="mode-tabs">
-          <button class="mode-btn active" id="modeListen" type="button">Listen &amp; Loop</button>
-          <button class="mode-btn" id="modeRecite" type="button">Recite &amp; Check</button>
-        </div>
-        <div class="mode-note">Recite &amp; Check is intentionally forgiving. It checks whether the words stay in the right sequence. It does not grade Tajweed, madd length, pauses, speed, or accent.</div>
-      </div>
     </section>
 
     <section>
@@ -428,8 +406,8 @@ function renderVerses(){
     sp.setAttribute("role", "button");
     sp.setAttribute("aria-label", `Play verse ${v.a}`);
     sp.innerHTML = `<span class="t">…</span> <span class="num">﴿${arNum(v.a)}﴾</span> `;
-    sp.addEventListener("click", () => { if(practiceMode==="recite"){ if(!started) started=true; i=k; resetReciteWords(); showVerse(); applyMode(); } else jumpTo(k); });
-    sp.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); if(practiceMode==="recite"){ if(!started) started=true; i=k; resetReciteWords(); showVerse(); applyMode(); } else jumpTo(k); } });
+    sp.addEventListener("click", () => jumpTo(k));
+    sp.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); jumpTo(k); } });
     para.appendChild(sp);
     para.appendChild(document.createTextNode(" "));
     ayahEls.push(sp);
@@ -506,167 +484,6 @@ function applyTextSize(){ document.documentElement.style.setProperty("--ar-size"
 $("textSize").value = store.get("hl.textSize") || "1.7rem";
 applyTextSize();
 $("textSize").addEventListener("change", () => { store.set("hl.textSize", $("textSize").value); applyTextSize(); });
-
-/* ---------- Recite & Check ---------- */
-let practiceMode = store.get("hl.mode") || "listen";
-let recognition = null, reciting = false, wantRecognition = false;
-let finalTranscript = "", interimTranscript = "", lastWarningKey = "", warningHits = 0;
-let reciteAdvanceTimer = null, reciteRestartTimer = null;
-const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-
-function normalizeArabic(t){
-  return (t||"")
-    .replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g,"")
-    .replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي")
-    .replace(/[ؤ]/g,"و").replace(/[ئ]/g,"ي")
-    .replace(/[^\u0621-\u063A\u0641-\u064A\s]/g," ")
-    .replace(/\s+/g," ").trim();
-}
-function words(t){ const n=normalizeArabic(t); return n ? n.split(" ") : []; }
-function expectedWords(k=i){
-  const v=list[k], map=v&&surahText[v.s]; return (v&&map&&map[v.a]) ? words(map[v.a]) : [];
-}
-function editAlignment(a,b){
-  const m=a.length,n=b.length,dp=Array.from({length:m+1},()=>Array(n+1));
-  for(let x=0;x<=m;x++) dp[x][0]={c:x,op:"del"};
-  for(let y=0;y<=n;y++) dp[0][y]={c:y,op:"ins"};
-  dp[0][0]={c:0,op:""};
-  for(let x=1;x<=m;x++) for(let y=1;y<=n;y++){
-    const same=a[x-1]===b[y-1];
-    const choices=[
-      {c:dp[x-1][y].c+1,op:"del"},
-      {c:dp[x][y-1].c+1,op:"ins"},
-      {c:dp[x-1][y-1].c+(same?0:1),op:same?"ok":"sub"}
-    ];
-    dp[x][y]=choices.reduce((p,q)=>q.c<p.c?q:p);
-  }
-  let x=m,y=n,ops=[];
-  while(x||y){ const op=dp[x][y].op; ops.push({op,exp:x?a[x-1]:"",heard:y?b[y-1]:""}); if(op==="ok"||op==="sub"){x--;y--;} else if(op==="del")x--; else y--; }
-  return {distance:dp[m][n].c,ops:ops.reverse()};
-}
-function bestPrefix(exp, heard){
-  if(!heard.length) return {distance:0,ops:[],len:0,ratio:0};
-  let best=null;
-  const lo=Math.max(1,heard.length-2), hi=Math.min(exp.length,heard.length+2);
-  for(let len=lo;len<=hi;len++){
-    const r=editAlignment(exp.slice(0,len),heard);
-    const ratio=r.distance/Math.max(len,heard.length,1);
-    if(!best || ratio<best.ratio || (ratio===best.ratio && r.distance<best.distance)) best={...r,len,ratio};
-  }
-  return best;
-}
-function setReciteFeedback(msg,kind=""){
-  const el=$("reciteFeedback"); el.textContent=msg; el.className="recite-feedback"+(kind?" "+kind:"");
-}
-function resetReciteWords(){
-  finalTranscript=""; interimTranscript=""; lastWarningKey=""; warningHits=0; clearTimeout(reciteAdvanceTimer);
-  $("heardText").textContent="Listening for this verse…";
-  setReciteFeedback("Checks word sequence only — not Tajweed, madd, pacing, or pronunciation quality.");
-}
-function applyMode(){
-  const rec=practiceMode==="recite";
-  $("modeListen").classList.toggle("active",!rec); $("modeRecite").classList.toggle("active",rec);
-  $("reciteCard").hidden=!rec;
-  document.querySelector('.counts').style.display=rec?'none':'';
-  if(rec){
-    cur.pause(); nxt.pause(); setPlaying(false);
-    $("btnPlay").setAttribute("aria-label",reciting?"Stop microphone":"Start microphone");
-    $("playIcon").innerHTML=reciting?'<path d="M6 5h12v14H6z"/>':'<path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zm-5-3a5 5 0 0 0 10 0h2a7 7 0 0 1-6 6.92V21h-2v-3.08A7 7 0 0 1 5 11z"/>';
-    $("nowLabel").textContent=started&&list[i]?`${SURAHS[list[i].s-1][0]} ${list[i].s}:${list[i].a} · Recite`:"Ready · Recite & Check";
-  } else {
-    stopReciting(); $("playIcon").innerHTML='<path d="M8 5v14l11-7z"/>'; $("btnPlay").setAttribute("aria-label","Play"); showVerse();
-  }
-}
-function setMode(m){ practiceMode=m; store.set("hl.mode",m); applyMode(); }
-$("modeListen").onclick=()=>setMode("listen");
-$("modeRecite").onclick=()=>setMode("recite");
-
-function ensureRecognition(){
-  if(recognition || !SpeechRecognitionAPI) return !!recognition;
-  recognition=new SpeechRecognitionAPI(); recognition.lang="ar-SA"; recognition.continuous=true; recognition.interimResults=true; recognition.maxAlternatives=3;
-  recognition.onresult=e=>{
-    let inter="";
-    for(let n=e.resultIndex;n<e.results.length;n++){
-      const r=e.results[n]; let best=r[0].transcript;
-      if(r.isFinal) finalTranscript+=(finalTranscript?" ":"")+best; else inter+=(inter?" ":"")+best;
-    }
-    interimTranscript=inter;
-    const heard=(finalTranscript+(interimTranscript?" "+interimTranscript:"")).trim();
-    $("heardText").textContent=heard||"Listening…";
-    if(finalTranscript.trim()) evaluateRecitation(words(finalTranscript),true);
-    else if(words(heard).length>=4) evaluateRecitation(words(heard),false);
-  };
-  recognition.onerror=e=>{
-    if(e.error==="not-allowed"||e.error==="service-not-allowed"){ wantRecognition=false; reciting=false; setReciteFeedback("Microphone permission is needed for Recite & Check.","warn"); applyMode(); }
-  };
-  recognition.onend=()=>{
-    if(wantRecognition){ clearTimeout(reciteRestartTimer); reciteRestartTimer=setTimeout(()=>{ try{recognition.start();}catch(e){} },250); }
-  };
-  return true;
-}
-function startReciting(){
-  if(!SpeechRecognitionAPI){ setReciteFeedback("Speech recognition is not available in this browser. Try Chrome on Android or desktop.","warn"); return; }
-  list=buildList(); if(!list.length)return;
-  if(!started){started=true;i=0;rep=0;round=0;showVerse();}
-  const v=list[i]; if(!surahText[v.s]||!surahText[v.s][v.a]){ loadSurahText(v.s); setReciteFeedback("Loading the verse text… tap the microphone again in a moment."); return; }
-  cur.pause(); nxt.pause(); clearTimeout(gapTimer); resetReciteWords(); wantRecognition=true; reciting=true; applyMode(); requestWake();
-  if(ensureRecognition()) try{recognition.start();}catch(e){}
-  setStatus("Listening…");
-}
-function stopReciting(){
-  wantRecognition=false; reciting=false; clearTimeout(reciteRestartTimer); clearTimeout(reciteAdvanceTimer);
-  if(recognition) try{recognition.stop();}catch(e){}
-  $("btnPlay").classList.remove("mic-live"); releaseWake(); if(practiceMode==="recite") setStatus("");
-}
-function toggleReciting(){ if(reciting){stopReciting();applyMode();}else startReciting(); }
-
-function evaluateRecitation(heard,isFinal){
-  const exp=expectedWords(); if(!exp.length||!heard.length)return;
-  const p=bestPrefix(exp,heard);
-  const full=editAlignment(exp,heard), fullRatio=full.distance/Math.max(exp.length,heard.length,1);
-  // Completion is tolerant of one recognition miss on a longer ayah, but short ayahs stay stricter.
-  const allowance=exp.length>=10?1:0;
-  if(isFinal && heard.length>=Math.max(1,exp.length-1) && full.distance<=allowance){
-    lastWarningKey="";warningHits=0;setReciteFeedback("Good — verse complete.","good");
-    clearTimeout(reciteAdvanceTimer); reciteAdvanceTimer=setTimeout(()=>advanceReciteVerse(),650); return;
-  }
-  // Do not complain about an unfinished verse or a single uncertain recognition wobble.
-  if(heard.length<3 || p.distance===0 || p.ratio<=0.18){ lastWarningKey="";warningHits=0;setReciteFeedback("Good — keep going.","good"); return; }
-  // A likely jump is only called after a strong match to another selected ayah.
-  let jumpBest=null;
-  if(heard.length>=4){
-    for(let k=0;k<list.length;k++) if(k!==i){ const ew=expectedWords(k); if(!ew.length)continue; const q=bestPrefix(ew,heard); if(!jumpBest||q.ratio<jumpBest.ratio)jumpBest={k,ratio:q.ratio}; }
-  }
-  let msg="",key="";
-  if(jumpBest&&jumpBest.ratio<=0.12&&p.ratio>=0.34){ const v=list[jumpBest.k]; msg=`Check the verse — that sounds closer to ${SURAHS[v.s-1][0]} ${v.s}:${v.a}.`; key="jump:"+jumpBest.k; }
-  else if(isFinal && p.ratio>=0.28 && p.distance>=2){
-    const bad=p.ops.find(o=>o.op!=="ok");
-    if(bad){
-      if(bad.op==="del") msg=`Check this part — expected “${bad.exp}”. A word may have been skipped.`;
-      else if(bad.op==="ins") msg=`Check this part — “${bad.heard}” may be an extra/repeated word.`;
-      else msg=`Check this part — expected “${bad.exp}”.`;
-      key=bad.op+":"+bad.exp+":"+bad.heard;
-    }
-  }
-  if(!msg){ setReciteFeedback("Keep going — I’m waiting for a clear word-order mistake before interrupting."); return; }
-  if(key===lastWarningKey) warningHits++; else {lastWarningKey=key;warningHits=1;}
-  // Require the same problem twice before interrupting: this is what makes the checker less jumpy.
-  if(warningHits>=2){ setReciteFeedback(msg,"warn"); navigator.vibrate&&navigator.vibrate(70); }
-  else setReciteFeedback("Keep going — checking…");
-}
-function advanceReciteVerse(){
-  if(practiceMode!=="recite")return;
-  i++; if(i>=list.length){ i=0; setReciteFeedback("Range complete. بارك الله فيك","good"); stopReciting(); started=false; showVerse(); applyMode(); return; }
-  started=true; resetReciteWords(); showVerse(); applyMode();
-}
-function reciteJump(d){
-  list=buildList(); if(!list.length)return; if(!started)started=true;
-  i=(i+d+list.length)%list.length; resetReciteWords(); showVerse(); applyMode();
-}
-$("clearRecite").onclick=()=>{ resetReciteWords(); if(reciting){ try{recognition&&recognition.stop();}catch(e){} } };
-$("hearVerse").onclick=()=>{
-  if(!list.length)return; stopReciting(); const v=list[i]; prepare(cur,v); try{cur.currentTime=0;}catch(e){} cur.play().catch(()=>setReciteFeedback("Couldn't play the verse audio.","warn")); setReciteFeedback("Listening to the verse. Tap the microphone when you are ready to recite."); applyMode();
-};
 
 /* Two audio players take turns: while one recites, the other has the
    next verse already loaded, so it starts the instant the first ends. */
@@ -777,9 +594,9 @@ function jumpTo(k){
   if (!playing){ setPlaying(true); }
   loadAndPlay(); unlockSecondPlayer();
 }
-$("btnPlay").onclick = () => practiceMode==="recite" ? toggleReciting() : (playing ? pause() : play());
-$("btnPrev").onclick = () => practiceMode==="recite" ? reciteJump(-1) : jump(-1);
-$("btnNext").onclick = () => practiceMode==="recite" ? reciteJump(1) : jump(1);
+$("btnPlay").onclick = () => playing ? pause() : play();
+$("btnPrev").onclick = () => jump(-1);
+$("btnNext").onclick = () => jump(1);
 if ("mediaSession" in navigator){
   const ms = navigator.mediaSession;
   try{
@@ -790,6 +607,103 @@ if ("mediaSession" in navigator){
   }catch(e){}
 }
 
+/* ---------- Recite & Check ---------- */
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let recognition = null, reciteOn = false, recitePos = 0, mismatchStreak = 0, lastMistakeAt = 0;
+let reciteWords = [], reciteVerseIndex = 0, lastTranscript = "";
+
+function normAr(t){
+  return (t||"").normalize("NFKD")
+    .replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g,"")
+    .replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي")
+    .replace(/ة/g,"ه").replace(/[^ء-ي\s]/g," ").replace(/\s+/g," ").trim();
+}
+function closeWord(a,b){
+  a=normAr(a); b=normAr(b); if(!a||!b) return false; if(a===b) return true;
+  if(a.length>=4 && b.length>=4 && (a.startsWith(b)||b.startsWith(a))) return true;
+  const m=a.length,n=b.length; if(Math.abs(m-n)>1) return false;
+  let d=Array(n+1).fill(0).map((_,j)=>j);
+  for(let x=1;x<=m;x++){ let nd=[x]; for(let y=1;y<=n;y++) nd[y]=Math.min(nd[y-1]+1,d[y]+1,d[y-1]+(a[x-1]===b[y-1]?0:1)); d=nd; }
+  return d[n] <= (Math.max(m,n)>=5 ? 1 : 0);
+}
+function verseWords(k){
+  const v=list[k], t=surahText[v.s] && surahText[v.s][v.a];
+  return normAr(t||"").split(" ").filter(Boolean);
+}
+function setReciteStatus(msg, cls=""){
+  const e=$("reciteStatus"); e.textContent=msg; e.className="recite-status"+(cls?" "+cls:"");
+}
+function reciteTarget(k, pos=0){
+  ayahEls.forEach(e=>e.classList.remove("recite-target","recite-error"));
+  reciteVerseIndex=Math.max(0,Math.min(k,list.length-1)); reciteWords=verseWords(reciteVerseIndex); recitePos=pos; mismatchStreak=0;
+  const el=ayahEls[reciteVerseIndex]; if(el){ el.classList.add("recite-target"); el.scrollIntoView({block:"center",behavior:reduceMotion?"auto":"smooth"}); }
+  const v=list[reciteVerseIndex]; $("nowLabel").textContent=`Recite · ${SURAHS[v.s-1][0]} ${v.s}:${v.a}`;
+}
+function mistake(msg){
+  const now=Date.now(); if(now-lastMistakeAt<1200) return; lastMistakeAt=now;
+  const el=ayahEls[reciteVerseIndex]; if(el){ el.classList.add("recite-error"); setTimeout(()=>el.classList.remove("recite-error"),900); }
+  if(navigator.vibrate) navigator.vibrate([180,90,180]);
+  try{ const ac=new (window.AudioContext||window.webkitAudioContext)(),o=ac.createOscillator(),g=ac.createGain(); o.frequency.value=430; g.gain.value=.08; o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+.16); }catch(e){}
+  setReciteStatus(msg,"bad");
+}
+function consumeRecognized(words){
+  if(!reciteOn||!reciteWords.length) return;
+  for(const heard of words){
+    if(recitePos>=reciteWords.length){
+      if(reciteVerseIndex+1<list.length){ reciteTarget(reciteVerseIndex+1,0); } else { setReciteStatus("Range completed. بارك الله فيك","good"); stopRecite(); return; }
+    }
+    const expected=reciteWords[recitePos];
+    if(closeWord(heard,expected)){ recitePos++; mismatchStreak=0; setReciteStatus(`Good · ${recitePos}/${reciteWords.length} words`,"good"); continue; }
+    // One-word lookahead catches a skipped word, but requires confirmation before alerting.
+    if(recitePos+1<reciteWords.length && closeWord(heard,reciteWords[recitePos+1])){
+      mismatchStreak++; if(mismatchStreak>=2){ mistake(`Possible skipped word: ${expected}`); mismatchStreak=0; }
+      recitePos+=2; continue;
+    }
+    // Repeating the immediately previous correct word once is tolerated; repeated repetition is flagged.
+    if(recitePos>0 && closeWord(heard,reciteWords[recitePos-1])){
+      mismatchStreak++; if(mismatchStreak>=2){ mistake("Possible repeated word"); mismatchStreak=0; } continue;
+    }
+    // Check whether speech matches the start of a nearby wrong verse.
+    let jumped=-1;
+    for(let k=Math.max(0,reciteVerseIndex-2);k<=Math.min(list.length-1,reciteVerseIndex+3);k++){
+      if(k===reciteVerseIndex) continue; const w=verseWords(k); if(w.length && closeWord(heard,w[0])){ jumped=k; break; }
+    }
+    if(jumped>=0){ mismatchStreak++; if(mismatchStreak>=2){ const v=list[jumped]; mistake(`You may have jumped to ${v.s}:${v.a}`); mismatchStreak=0; } continue; }
+    mismatchStreak++;
+    if(mismatchStreak>=2){ mistake(`Check this word: ${expected}`); mismatchStreak=0; }
+  }
+}
+function startRecite(){
+  if(!SpeechRecognition){ setReciteStatus("Arabic speech recognition is not supported in this browser.","bad"); return; }
+  pause(); list=buildList(); if(!list.length)return;
+  if(!surahText[list[0].s]){ loadSurahText(list[0].s); setReciteStatus("Loading Qur’an text… tap Recite & Check again in a moment."); return; }
+  reciteOn=true; $("btnRecite").classList.add("on"); $("btnRecite").textContent="■ Stop checking"; $("btnHelp").disabled=false;
+  reciteTarget(0,0); setReciteStatus("Listening… recite normally.");
+  recognition=new SpeechRecognition(); recognition.lang="ar-SA"; recognition.continuous=true; recognition.interimResults=true; recognition.maxAlternatives=3;
+  recognition.onresult=e=>{
+    let finals=[];
+    for(let x=e.resultIndex;x<e.results.length;x++) if(e.results[x].isFinal){
+      let best=e.results[x][0].transcript; finals.push(...normAr(best).split(" ").filter(Boolean));
+    }
+    if(finals.length){ lastTranscript=finals.join(" "); consumeRecognized(finals); }
+  };
+  recognition.onerror=e=>{ if(e.error!=="no-speech" && e.error!=="aborted") setReciteStatus(`Microphone: ${e.error}`,"bad"); };
+  recognition.onend=()=>{ if(reciteOn) try{recognition.start();}catch(e){} };
+  try{ recognition.start(); }catch(e){ setReciteStatus("Couldn’t start the microphone.","bad"); }
+}
+function stopRecite(){
+  reciteOn=false; if(recognition){ try{recognition.onend=null;recognition.stop();}catch(e){} recognition=null; }
+  $("btnRecite").classList.remove("on"); $("btnRecite").textContent="🎙 Recite & Check"; $("btnHelp").disabled=true;
+  ayahEls.forEach(e=>e.classList.remove("recite-target","recite-error"));
+}
+$("btnRecite").onclick=()=>reciteOn?stopRecite():startRecite();
+$("btnHelp").onclick=()=>{
+  if(!reciteOn)return; const v=list[reciteVerseIndex];
+  try{recognition&&recognition.stop();}catch(e){}
+  prepare(cur,v); cur.currentTime=0; cur.play(); setReciteStatus("Playing the correct ayah…");
+  cur.onended=()=>{ cur.onended=null; if(reciteOn){ setReciteStatus("Listening… try again."); try{recognition&&recognition.start();}catch(e){} } };
+};
+
 /* Keep screen awake while playing (optional) */
 let wake = null;
 async function requestWake(){ try{ if ("wakeLock" in navigator && !wake) wake = await navigator.wakeLock.request("screen"); wake && wake.addEventListener("release", ()=>wake=null); }catch(e){} }
@@ -798,7 +712,6 @@ document.addEventListener("visibilitychange", () => { if (document.visibilitySta
 
 renderRanges();
 changed();
-applyMode();
 </script>
 </body>
 </html>
