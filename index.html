@@ -609,7 +609,8 @@ if ("mediaSession" in navigator){
 
 /* ---------- Recite & Check ---------- */
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-let recognition=null, reciteOn=false, reciteIndex=0, recitePos=0, suspect=null, suspectCount=0, helping=false;
+let recognition=null, reciteOn=false, reciteIndex=0, recitePos=0, helping=false;
+let lastFinalPhrase="", lastFinalAt=0, mismatchKey="", mismatchCount=0;
 function normAr(t){ return (t||"").normalize("NFKD").replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g,"").replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي").replace(/ة/g,"ه").replace(/[^\u0621-\u064A\s]/g," ").replace(/\s+/g," ").trim(); }
 function distance1(a,b){ if(a===b)return true; if(Math.abs(a.length-b.length)>1)return false; let i=0,j=0,d=0; while(i<a.length&&j<b.length){ if(a[i]===b[j]){i++;j++;continue} if(++d>1)return false; if(a.length>b.length)i++; else if(b.length>a.length)j++; else{i++;j++;} } return d+(i<a.length||j<b.length?1:0)<=1; }
 function closeWord(a,b){ a=normAr(a); b=normAr(b); if(!a||!b)return false; if(a===b)return true; return Math.min(a.length,b.length)>=5 && distance1(a,b); }
@@ -617,46 +618,81 @@ function wordsAt(k){ const v=list[k], t=v&&surahText[v.s]&&surahText[v.s][v.a]; 
 function wordEls(k){ return ayahEls[k]?[...ayahEls[k].querySelectorAll(".word")]:[]; }
 function clearMarks(){ document.querySelectorAll(".word.missed").forEach(x=>x.classList.remove("missed")); }
 function clearTracking(){ document.querySelectorAll(".word.tracking").forEach(x=>x.classList.remove("tracking")); }
-function markProgress(){
-  clearTracking();
-  wordEls(reciteIndex).forEach((x,n)=>{ x.classList.toggle("recited",n<recitePos); if(n===recitePos) x.classList.add("tracking"); });
-}
+function markProgress(){ clearTracking(); wordEls(reciteIndex).forEach((x,n)=>{ x.classList.toggle("recited",n<recitePos); if(n===recitePos)x.classList.add("tracking"); }); }
 function markMissed(pos){ clearMarks(); const x=wordEls(reciteIndex)[pos]; if(x){ x.classList.add("missed"); x.scrollIntoView({block:"center",behavior:reduceMotion?"auto":"smooth"}); } }
 function alertMistake(){ try{navigator.vibrate&&navigator.vibrate([160,80,160])}catch(e){} try{ const c=new (window.AudioContext||window.webkitAudioContext)(),o=c.createOscillator(),g=c.createGain(); o.frequency.value=420; g.gain.value=.12;o.connect(g);g.connect(c.destination);o.start();o.stop(c.currentTime+.12); }catch(e){} }
-function setReciteTarget(k,pos=0){ clearMarks(); reciteIndex=k; recitePos=pos; suspect=null;suspectCount=0; i=k; started=true; showVerse(); markProgress(); const v=list[k]; $("nowLabel").textContent=`Reciting · ${SURAHS[v.s-1][0]} ${v.s}:${v.a}`; }
-function nextReciteAyah(){ clearMarks(); clearTracking(); if(reciteIndex+1>=list.length){ stopRecite(false); $("progress").style.width="100%"; setStatus("Recitation complete — selected range finished. بارك الله فيك"); return; } setReciteTarget(reciteIndex+1,0); setStatus("Good — next ayah."); }
-function processToken(tok){ const ws=wordsAt(reciteIndex); if(!ws.length||recitePos>=ws.length)return; if(closeWord(tok,ws[recitePos])){ suspect=null;suspectCount=0; clearMarks(); recitePos++; markProgress(); if(recitePos>=ws.length) nextReciteAyah(); return; }
-  // If the recognizer hears a later word, identify the exact skipped expected word, but do NOT advance until corrected.
-  let ahead=-1; for(let n=recitePos+1;n<Math.min(ws.length,recitePos+4);n++){ if(closeWord(tok,ws[n])){ahead=n;break;} }
-  const key=ahead>=0?`skip:${recitePos}:${ahead}`:`wrong:${recitePos}:${normAr(tok)}`;
-  if(suspect===key)suspectCount++; else {suspect=key;suspectCount=1;}
-  // Require confirmation before alerting, to avoid random recognition bloops.
-  if(suspectCount>=2){ markMissed(recitePos); alertMistake(); setStatus(ahead>=0?"You skipped the red word. Say it to continue.":"Check the red word and try it again.",true); suspectCount=0; }
-}
-function processPhrase(text,isFinal=true){
-  const got=normAr(text).split(/\s+/).filter(Boolean), ws=wordsAt(reciteIndex);
+function resetMismatch(){ mismatchKey=""; mismatchCount=0; }
+function setReciteTarget(k,pos=0){ clearMarks(); reciteIndex=k;recitePos=pos;resetMismatch();lastFinalPhrase=""; i=k;started=true;showVerse();markProgress();const v=list[k];$("nowLabel").textContent=`Reciting · ${SURAHS[v.s-1][0]} ${v.s}:${v.a}`; }
+function nextReciteAyah(){ clearMarks();clearTracking(); if(reciteIndex+1>=list.length){stopRecite(false);$("progress").style.width="100%";setStatus("Recitation complete — selected range finished. بارك الله فيك");return;} setReciteTarget(reciteIndex+1,0);setStatus("Good — next ayah."); }
+function findMatch(tok,ws,from,to){ for(let n=from;n<Math.min(ws.length,to);n++)if(closeWord(tok,ws[n]))return n; return -1; }
+function processFinalPhrase(text){
+  const phrase=normAr(text), now=Date.now();
+  if(!phrase)return;
+  if(phrase===lastFinalPhrase && now-lastFinalAt<1800)return;
+  lastFinalPhrase=phrase; lastFinalAt=now;
+  let got=phrase.split(/\s+/).filter(Boolean), ws=wordsAt(reciteIndex);
   if(!got.length||!ws.length||recitePos>=ws.length)return;
-  for(const tok of got){
-    if(closeWord(tok,ws[recitePos])){
-      clearMarks(); mismatchCount=0; recitePos++; markProgress();
-      if(recitePos>=ws.length){nextReciteAyah();return;}
-      setStatus("Listening — keep going."); continue;
-    }
-    let echo=false;
-    for(let back=Math.max(0,recitePos-2);back<recitePos;back++) if(closeWord(tok,ws[back])){echo=true;break;}
-    if(echo)continue;
-    mismatchCount++;
-    if(isFinal||mismatchCount>=2){
-      markMissed(recitePos); alertMistake();
-      setStatus("Wrong word — correct the red word to continue.",true);
+
+  // Chrome often returns the whole phrase-so-far again. Find the first token
+  // that belongs at, or immediately after, our current cursor. Earlier tokens are echoes.
+  let start=-1;
+  for(let g=0;g<got.length;g++){
+    if(closeWord(got[g],ws[recitePos])){start=g;break;}
+    const back=findMatch(got[g],ws,Math.max(0,recitePos-6),recitePos);
+    if(back>=0)continue;
+    const ahead=findMatch(got[g],ws,recitePos+1,recitePos+4);
+    if(ahead>=0){
+      const key=`skip:${reciteIndex}:${recitePos}:${ahead}`;
+      if(mismatchKey===key)mismatchCount++;else{mismatchKey=key;mismatchCount=1;}
+      if(mismatchCount>=2){markMissed(recitePos);alertMistake();setStatus("You skipped the red word. Say it to continue.",true);resetMismatch();}
       return;
     }
+    // Unknown leading material can be recognition noise; don't bloop on it.
   }
+  if(start<0){
+    // Only call a word wrong when the final result contains no recent echo and
+    // no expected word. Requiring the same mismatch twice prevents random bloops.
+    const recentEcho=got.some(t=>findMatch(t,ws,Math.max(0,recitePos-5),recitePos)>=0);
+    if(recentEcho)return;
+    const key=`wrong:${reciteIndex}:${recitePos}:${got.join(" ")}`;
+    if(mismatchKey===key)mismatchCount++;else{mismatchKey=key;mismatchCount=1;}
+    if(mismatchCount>=2){markMissed(recitePos);alertMistake();setStatus("Wrong word — correct the red word to continue.",true);resetMismatch();}
+    return;
+  }
+
+  resetMismatch(); clearMarks();
+  for(let g=start;g<got.length && recitePos<ws.length;g++){
+    const tok=got[g];
+    if(closeWord(tok,ws[recitePos])){
+      recitePos++; markProgress();
+      if(recitePos>=ws.length){nextReciteAyah();return;}
+      continue;
+    }
+    // Ignore words the recognizer repeated from immediately behind the cursor.
+    if(findMatch(tok,ws,Math.max(0,recitePos-6),recitePos)>=0)continue;
+    const ahead=findMatch(tok,ws,recitePos+1,recitePos+4);
+    if(ahead>=0){
+      const key=`skip:${reciteIndex}:${recitePos}:${ahead}`;
+      if(mismatchKey===key)mismatchCount++;else{mismatchKey=key;mismatchCount=1;}
+      if(mismatchCount>=2){markMissed(recitePos);alertMistake();setStatus("You skipped the red word. Say it to continue.",true);resetMismatch();}
+      return;
+    }
+    // A single odd token inside an otherwise good phrase is ignored; wait for
+    // the next final recognition result rather than making a random sound.
+    return;
+  }
+  setStatus("Listening — keep going.");
 }
-function startRecite(){ if(!SpeechRecognition){setStatus("Recite & Check needs Chrome speech recognition on this device.",true);return;} pause(); list=buildList(); renderVerses(); const begin=()=>{ if(!wordsAt(0).length){setStatus("Loading Qur’an text… tap Recite & Check again in a moment.");return;} reciteOn=true; document.body.classList.add("recite-mode"); $("btnRecite").classList.add("active"); $("btnRecite").textContent="■ Stop checking"; $("btnHelp").hidden=false; setReciteTarget(0,0); recognition=new SpeechRecognition(); recognition.lang="ar-SA"; recognition.continuous=true; recognition.interimResults=true; recognition.maxAlternatives=3; recognition.onresult=e=>{ for(let r=e.resultIndex;r<e.results.length;r++){ const res=e.results[r]; if(res&&res[0]) processPhrase(res[0].transcript, !!res.isFinal); } }; recognition.onerror=e=>{ if(e.error!=="no-speech"&&e.error!=="aborted")setStatus("Microphone recognition paused. Try again.",true); }; recognition.onend=()=>{ if(reciteOn&&!helping){try{recognition.start()}catch(e){}} }; try{recognition.start();setStatus("Listening — recite normally.");}catch(e){setStatus("Couldn’t start the microphone.",true);} }; if(wordsAt(0).length)begin(); else setTimeout(begin,900); }
-function stopRecite(clear=true){ reciteOn=false; helping=false; document.body.classList.remove("recite-mode"); clearTracking(); if(recognition){try{recognition.onend=null;recognition.stop()}catch(e){}} recognition=null; $("btnRecite").classList.remove("active"); $("btnRecite").textContent="🎙 Recite & Check"; $("btnHelp").hidden=true; if(clear){clearMarks();document.querySelectorAll(".word.recited").forEach(x=>x.classList.remove("recited"));setStatus("");} }
+function wireRecognition(){
+  recognition=new SpeechRecognition(); recognition.lang="ar-SA"; recognition.continuous=true; recognition.interimResults=true; recognition.maxAlternatives=3;
+  recognition.onresult=e=>{ for(let r=e.resultIndex;r<e.results.length;r++){const res=e.results[r]; if(res&&res[0]&&res.isFinal)processFinalPhrase(res[0].transcript);} };
+  recognition.onerror=e=>{if(e.error!=="no-speech"&&e.error!=="aborted")setStatus("Microphone recognition paused. Try again.",true);};
+  recognition.onend=()=>{if(reciteOn&&!helping)setTimeout(()=>{try{recognition.start()}catch(e){}},180);};
+}
+function startRecite(){if(!SpeechRecognition){setStatus("Recite & Check needs Chrome speech recognition on this device.",true);return;}pause();list=buildList();renderVerses();const begin=()=>{if(!wordsAt(0).length){setStatus("Loading Qur’an text… tap Recite & Check again in a moment.");return;}reciteOn=true;document.body.classList.add("recite-mode");$("btnRecite").classList.add("active");$("btnRecite").textContent="■ Stop checking";$("btnHelp").hidden=false;setReciteTarget(0,0);wireRecognition();try{recognition.start();setStatus("Listening — recite normally.");}catch(e){setStatus("Couldn’t start the microphone.",true);}};if(wordsAt(0).length)begin();else setTimeout(begin,900);}
+function stopRecite(clear=true){reciteOn=false;helping=false;document.body.classList.remove("recite-mode");clearTracking();if(recognition){try{recognition.onend=null;recognition.stop()}catch(e){}}recognition=null;$("btnRecite").classList.remove("active");$("btnRecite").textContent="🎙 Recite & Check";$("btnHelp").hidden=true;if(clear){clearMarks();document.querySelectorAll(".word.recited").forEach(x=>x.classList.remove("recited"));setStatus("");}}
 $("btnRecite").onclick=()=>reciteOn?stopRecite():startRecite();
-$("btnHelp").onclick=async()=>{if(!reciteOn||helping)return;helping=true;$("btnHelp").disabled=true;setStatus("Playing the current ayah…");if(recognition){try{recognition.onend=null;recognition.stop()}catch(e){}}const v=list[reciteIndex];const a=new Audio(urlFor(v));const resume=()=>{helping=false;$("btnHelp").disabled=false;if(reciteOn){recognition=new SpeechRecognition();recognition.lang="ar-SA";recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=1;recognition.onresult=e=>{for(let r=e.resultIndex;r<e.results.length;r++){const q=e.results[r];if(q&&q[0])processPhrase(q[0].transcript,!!q.isFinal);}};recognition.onend=()=>{if(reciteOn&&!helping)setTimeout(()=>{try{recognition.start()}catch(e){}},250)};try{recognition.start()}catch(e){}}};a.onended=resume;a.onerror=()=>{setStatus("Couldn’t play the help audio.",true);resume()};try{await a.play()}catch(e){setStatus("Tap Help me again to play the ayah.",true);resume()}};
+$("btnHelp").onclick=async()=>{if(!reciteOn||helping)return;helping=true;$("btnHelp").disabled=true;setStatus("Playing the current ayah…");if(recognition){try{recognition.onend=null;recognition.stop()}catch(e){}}const v=list[reciteIndex];const a=new Audio(urlFor(v));const resume=()=>{helping=false;$("btnHelp").disabled=false;if(reciteOn){wireRecognition();try{recognition.start();setStatus("Listening — continue reciting.");}catch(e){setStatus("Tap Recite & Check to resume.",true);}}};a.onended=resume;a.onerror=()=>{setStatus("Couldn’t play the help audio.",true);resume()};try{await a.play()}catch(e){setStatus("Tap Help me again to play the ayah.",true);resume()}};
 
 /* Keep screen awake while playing (optional) */
 let wake = null;
