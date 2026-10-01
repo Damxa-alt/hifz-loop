@@ -633,11 +633,30 @@ function processToken(tok){ const ws=wordsAt(reciteIndex); if(!ws.length||recite
   // Require confirmation before alerting, to avoid random recognition bloops.
   if(suspectCount>=2){ markMissed(recitePos); alertMistake(); setStatus(ahead>=0?"You skipped the red word. Say it to continue.":"Check the red word and try it again.",true); suspectCount=0; }
 }
-function processPhrase(text){ normAr(text).split(/\s+/).filter(Boolean).forEach(processToken); }
-function startRecite(){ if(!SpeechRecognition){setStatus("Recite & Check needs Chrome speech recognition on this device.",true);return;} pause(); list=buildList(); renderVerses(); const begin=()=>{ if(!wordsAt(0).length){setStatus("Loading Qur’an text… tap Recite & Check again in a moment.");return;} reciteOn=true; document.body.classList.add("recite-mode"); $("btnRecite").classList.add("active"); $("btnRecite").textContent="■ Stop checking"; $("btnHelp").hidden=false; setReciteTarget(0,0); recognition=new SpeechRecognition(); recognition.lang="ar-SA"; recognition.continuous=true; recognition.interimResults=false; recognition.maxAlternatives=3; recognition.onresult=e=>{ for(let r=e.resultIndex;r<e.results.length;r++) if(e.results[r].isFinal){ let best=e.results[r][0].transcript; processPhrase(best); } }; recognition.onerror=e=>{ if(e.error!=="no-speech"&&e.error!=="aborted")setStatus("Microphone recognition paused. Try again.",true); }; recognition.onend=()=>{ if(reciteOn&&!helping){try{recognition.start()}catch(e){}} }; try{recognition.start();setStatus("Listening — recite normally.");}catch(e){setStatus("Couldn’t start the microphone.",true);} }; if(wordsAt(0).length)begin(); else setTimeout(begin,900); }
+function processPhrase(text,isFinal=true){
+  const got=normAr(text).split(/\s+/).filter(Boolean), ws=wordsAt(reciteIndex);
+  if(!got.length||!ws.length||recitePos>=ws.length)return;
+  for(const tok of got){
+    if(closeWord(tok,ws[recitePos])){
+      clearMarks(); mismatchCount=0; recitePos++; markProgress();
+      if(recitePos>=ws.length){nextReciteAyah();return;}
+      setStatus("Listening — keep going."); continue;
+    }
+    let echo=false;
+    for(let back=Math.max(0,recitePos-2);back<recitePos;back++) if(closeWord(tok,ws[back])){echo=true;break;}
+    if(echo)continue;
+    mismatchCount++;
+    if(isFinal||mismatchCount>=2){
+      markMissed(recitePos); alertMistake();
+      setStatus("Wrong word — correct the red word to continue.",true);
+      return;
+    }
+  }
+}
+function startRecite(){ if(!SpeechRecognition){setStatus("Recite & Check needs Chrome speech recognition on this device.",true);return;} pause(); list=buildList(); renderVerses(); const begin=()=>{ if(!wordsAt(0).length){setStatus("Loading Qur’an text… tap Recite & Check again in a moment.");return;} reciteOn=true; document.body.classList.add("recite-mode"); $("btnRecite").classList.add("active"); $("btnRecite").textContent="■ Stop checking"; $("btnHelp").hidden=false; setReciteTarget(0,0); recognition=new SpeechRecognition(); recognition.lang="ar-SA"; recognition.continuous=true; recognition.interimResults=true; recognition.maxAlternatives=3; recognition.onresult=e=>{ for(let r=e.resultIndex;r<e.results.length;r++){ const res=e.results[r]; if(res&&res[0]) processPhrase(res[0].transcript, !!res.isFinal); } }; recognition.onerror=e=>{ if(e.error!=="no-speech"&&e.error!=="aborted")setStatus("Microphone recognition paused. Try again.",true); }; recognition.onend=()=>{ if(reciteOn&&!helping){try{recognition.start()}catch(e){}} }; try{recognition.start();setStatus("Listening — recite normally.");}catch(e){setStatus("Couldn’t start the microphone.",true);} }; if(wordsAt(0).length)begin(); else setTimeout(begin,900); }
 function stopRecite(clear=true){ reciteOn=false; helping=false; document.body.classList.remove("recite-mode"); clearTracking(); if(recognition){try{recognition.onend=null;recognition.stop()}catch(e){}} recognition=null; $("btnRecite").classList.remove("active"); $("btnRecite").textContent="🎙 Recite & Check"; $("btnHelp").hidden=true; if(clear){clearMarks();document.querySelectorAll(".word.recited").forEach(x=>x.classList.remove("recited"));setStatus("");} }
 $("btnRecite").onclick=()=>reciteOn?stopRecite():startRecite();
-$("btnHelp").onclick=()=>{ if(!reciteOn)return; helping=true; if(recognition){try{recognition.stop()}catch(e){}} const v=list[reciteIndex]; prepare(cur,v); try{cur.currentTime=0}catch(e){} cur.onended=()=>{cur.onended=null;helping=false;if(reciteOn&&recognition){try{recognition.start()}catch(e){}}}; cur.play().catch(()=>{helping=false;setStatus("Couldn’t play the help audio.",true);}); };
+$("btnHelp").onclick=async()=>{if(!reciteOn||helping)return;helping=true;$("btnHelp").disabled=true;setStatus("Playing the current ayah…");if(recognition){try{recognition.onend=null;recognition.stop()}catch(e){}}const v=list[reciteIndex];const a=new Audio(urlFor(v));const resume=()=>{helping=false;$("btnHelp").disabled=false;if(reciteOn){recognition=new SpeechRecognition();recognition.lang="ar-SA";recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=1;recognition.onresult=e=>{for(let r=e.resultIndex;r<e.results.length;r++){const q=e.results[r];if(q&&q[0])processPhrase(q[0].transcript,!!q.isFinal);}};recognition.onend=()=>{if(reciteOn&&!helping)setTimeout(()=>{try{recognition.start()}catch(e){}},250)};try{recognition.start()}catch(e){}}};a.onended=resume;a.onerror=()=>{setStatus("Couldn’t play the help audio.",true);resume()};try{await a.play()}catch(e){setStatus("Tap Help me again to play the ayah.",true);resume()}};
 
 /* Keep screen awake while playing (optional) */
 let wake = null;
