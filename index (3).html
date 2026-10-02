@@ -1,0 +1,649 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12433F">
+<title>Hifz Loop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amiri+Quran&family=Figtree:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,500;6..72,600&display=swap">
+<style>
+:root{
+  --bg:#F6F4EE; --page:#FFFDF8; --surface:#FFFFFF; --surface-2:#ECEFEA; --ink:#12302D; --muted:#5C706C;
+  --line:#DCE2DD; --accent:#12433F; --accent-ink:#FFFFFF; --brass:#A57F35; --danger:#A33B2B;
+  --hl:#F1E3BF; --hl-ink:#12302D; --verse-num:#A57F35;
+  --ar-size:1.7rem;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0D1716; --page:#111E1C; --surface:#15221F; --surface-2:#1C2C29; --ink:#E4ECE9; --muted:#95A9A4;
+    --line:#2A3D39; --accent:#5FB3A6; --accent-ink:#0B1614; --brass:#D6B26A; --danger:#E27B69;
+    --hl:#3B3522; --hl-ink:#F5EBD2; --verse-num:#D6B26A;
+    color-scheme:dark;
+  }
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:16px/1.5 Figtree,system-ui,-apple-system,"Segoe UI",sans-serif;
+  -webkit-tap-highlight-color:transparent;
+}
+button{font:inherit}
+button:focus-visible,select:focus-visible,input:focus-visible,.ayah:focus-visible{outline:3px solid var(--brass);outline-offset:2px}
+
+/* Top bar */
+.top{
+  position:sticky; top:0; z-index:5;
+  background:var(--accent); color:var(--accent-ink);
+  padding:calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+  display:flex; align-items:center; gap:12px;
+}
+.top-l{flex:1;min-width:0}
+.brand{font-family:Newsreader,Georgia,serif;font-weight:600;font-size:1.25rem;line-height:1.2}
+.where{font-size:.82rem;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.icon{appearance:none;border:0;background:rgba(255,255,255,.12);color:inherit;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;cursor:pointer;flex:none}
+.icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* Verses page */
+.page{max-width:680px;margin:0 auto;padding:16px 16px 190px}
+.surah{background:var(--page);border:1px solid var(--line);border-radius:16px;padding:18px 16px 22px;margin-bottom:16px}
+.surah-head{display:flex;align-items:center;justify-content:center;gap:10px;margin:0 0 6px;
+  font-family:Newsreader,Georgia,serif;font-weight:600;font-size:1.05rem;color:var(--accent);text-align:center}
+.surah-head::before,.surah-head::after{content:"";flex:1;height:1px;background:var(--line)}
+.surah-sub{text-align:center;font-size:.78rem;color:var(--muted);margin-bottom:10px;font-variant-numeric:tabular-nums}
+.bism{font-family:"Amiri Quran","Amiri",serif;font-size:calc(var(--ar-size) * .95);text-align:center;direction:rtl;margin:4px 0 8px;line-height:2}
+.mushaf{font-family:"Amiri Quran","Amiri",serif;font-size:var(--ar-size);line-height:2.35;direction:rtl;text-align:justify;text-align-last:right;margin:0}
+.ayah{cursor:pointer;border-radius:8px;padding:2px 2px;transition:background-color .25s;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone}
+.ayah:hover{background:var(--surface-2)}
+.ayah.cur{background:var(--hl);color:var(--hl-ink)}
+body.recite-mode .ayah.cur{background:transparent;color:inherit}
+body.recite-mode .ayah:hover{background:transparent}
+.ayah.loading{color:var(--muted)}
+.word{border-radius:5px;padding:0 2px;transition:background-color .15s,color .15s,box-shadow .15s}
+.word.recited{opacity:.72}
+.word.tracking{background:var(--hl);color:var(--hl-ink);box-shadow:0 0 0 2px rgba(165,127,53,.20)}
+.word.missed{background:#B42318!important;color:#fff!important;box-shadow:0 0 0 2px rgba(180,35,24,.22)!important;opacity:1!important}
+.recitebar{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.testbtn{appearance:none;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:inherit;border-radius:10px;padding:8px 12px;font-weight:600}
+.testbtn.active{background:var(--accent-ink);color:var(--accent)}
+.num{color:var(--verse-num);font-size:.9em;white-space:nowrap}
+.hint{text-align:center;color:var(--muted);font-size:.85rem;margin:4px 0 0}
+
+/* Player bar */
+.player{
+  position:fixed; left:0; right:0; bottom:0; z-index:6;
+  background:var(--accent); color:var(--accent-ink);
+  padding:0 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  box-shadow:0 -6px 20px rgba(0,0,0,.12);
+}
+.player-in{max-width:680px;margin:0 auto;display:flex;flex-direction:column;gap:10px}
+.bar{height:4px;background:rgba(255,255,255,.18);margin:0 -16px}
+.bar i{display:block;height:100%;width:0;background:var(--brass);transition:width .3s}
+.prow{display:flex;align-items:center;gap:12px}
+.meta{flex:1;min-width:0}
+.now{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.counts{font-size:.8rem;opacity:.85;font-variant-numeric:tabular-nums;display:flex;gap:12px;flex-wrap:wrap}
+.counts b{font-weight:700}
+.controls{display:flex;align-items:center;gap:8px;flex:none}
+.ctl{appearance:none;border:0;background:rgba(255,255,255,.12);color:inherit;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;cursor:pointer}
+.ctl.big{width:58px;height:58px;background:var(--accent-ink);color:var(--accent)}
+.ctl svg{width:22px;height:22px;fill:currentColor}
+.ctl.big svg{width:28px;height:28px}
+.status{font-size:.82rem;text-align:center;opacity:.9}
+.status:empty{display:none}
+.status.err{color:#FFD2C8;opacity:1}
+
+/* Settings sheet */
+.sheet-back{position:fixed;inset:0;z-index:10;background:rgba(6,14,13,.45);display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:560px;max-height:92vh;overflow-y:auto;border-radius:20px 20px 0 0;
+  padding:0 16px calc(24px + env(safe-area-inset-bottom, 0px));display:flex;flex-direction:column;gap:18px;
+  animation:rise .22s ease-out}
+@keyframes rise{from{transform:translateY(24px);opacity:.6}to{transform:none;opacity:1}}
+.sheet-head{position:sticky;top:0;background:var(--bg);display:flex;align-items:center;justify-content:space-between;padding:16px 0 8px;z-index:1}
+.sheet-head h2{font-family:Newsreader,Georgia,serif;font-size:1.35rem;font-weight:600;margin:0;text-transform:none;letter-spacing:0;color:var(--ink)}
+.done{appearance:none;border:0;background:var(--accent);color:var(--accent-ink);font-weight:600;border-radius:10px;padding:10px 18px;cursor:pointer}
+h3{font-size:.72rem;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0;font-weight:600}
+section{display:flex;flex-direction:column;gap:10px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;display:flex;flex-direction:column;gap:14px}
+.range{display:grid;grid-template-columns:1fr auto;gap:10px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.range:last-of-type{border-bottom:0;padding-bottom:0}
+.range-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.range-fields .full{grid-column:1/-1}
+label,.field{display:flex;flex-direction:column;gap:4px;font-size:.78rem;color:var(--muted);font-weight:500}
+select,input[type=number]{
+  font:inherit;font-size:1rem;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px;width:100%;min-width:0;font-variant-numeric:tabular-nums
+}
+.remove{align-self:start;margin-top:22px;appearance:none;border:0;background:none;color:var(--muted);width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:1.3rem;line-height:1}
+.remove:hover{color:var(--danger)}
+.add{appearance:none;border:1px dashed var(--line);background:none;color:var(--accent);font-weight:600;border-radius:10px;padding:10px;cursor:pointer}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stepper{display:flex;align-items:center;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.stepper button{appearance:none;border:0;background:none;color:var(--ink);font-size:1.3rem;width:44px;height:44px;cursor:pointer;flex:none;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.stepper button:active{background:var(--line)}
+.stepper input{border:0;background:none;text-align:center;padding:0;border-radius:0;-moz-appearance:textfield}
+.stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.summary{font-size:.9rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.summary b{color:var(--ink)}
+.credits{font-size:.75rem;color:var(--muted);text-align:center}
+.credits a{color:inherit}
+@media (max-width:360px){ .counts{gap:6px} .ctl{width:40px;height:40px} .ctl.big{width:52px;height:52px} }
+@media (prefers-reduced-motion:reduce){.bar i,.ayah{transition:none}.sheet{animation:none}}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-l">
+    <div class="brand">Hifz Loop</div>
+    <div class="where" id="where">Al-Baqarah · 10–25</div>
+  </div>
+  <button class="icon" id="openSettings" aria-label="Open settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</header>
+
+<main class="page" id="verses" aria-live="off"></main>
+
+<div class="player" aria-live="polite">
+  <div class="player-in">
+    <div class="bar" aria-hidden="true"><i id="progress"></i></div>
+    <div class="prow">
+      <div class="meta">
+        <div class="now" id="nowLabel">Ready</div>
+        <div class="counts"><span>Verse <b id="cVerse">0 / 2</b></span><span>Round <b id="cRound">0 / 25</b></span></div>
+      </div>
+      <div class="controls">
+        <button class="ctl" id="btnPrev" aria-label="Previous verse"><svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg></button>
+        <button class="ctl big" id="btnPlay" aria-label="Play"><svg viewBox="0 0 24 24" id="playIcon"><path d="M8 5v14l11-7z"/></svg></button>
+        <button class="ctl" id="btnNext" aria-label="Next verse"><svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6zM16 6h2v12h-2z"/></svg></button>
+      </div>
+    </div>
+    <div class="recitebar"><button class="testbtn" id="btnRecite">🎙 Recite & Check</button><button class="testbtn" id="btnHelp" hidden>Help me</button></div>
+    <div class="status" id="status"></div>
+  </div>
+</div>
+
+<div class="sheet-back" id="sheetBack" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-head">
+      <h2 id="sheetTitle">Settings</h2>
+      <button class="done" id="closeSettings">Done</button>
+    </div>
+
+    <section>
+      <h3>What to recite</h3>
+      <div class="panel" id="ranges"></div>
+      <button class="add" id="addRange">+ Add another range</button>
+    </section>
+
+    <section>
+      <h3>Repeats</h3>
+      <div class="panel">
+        <div class="row2">
+          <div class="field"><span id="lPerVerse">Each verse (times)</span>
+            <div class="stepper"><button type="button" data-step="perVerse" data-d="-1" aria-label="Fewer repeats of each verse">−</button><input type="number" id="perVerse" min="1" max="50" value="2" inputmode="numeric" aria-labelledby="lPerVerse"><button type="button" data-step="perVerse" data-d="1" aria-label="More repeats of each verse">+</button></div>
+          </div>
+          <div class="field"><span id="lRounds">Whole range (times)</span>
+            <div class="stepper"><button type="button" data-step="rounds" data-d="-1" aria-label="Fewer rounds">−</button><input type="number" id="rounds" min="1" max="500" value="25" inputmode="numeric" aria-labelledby="lRounds"><button type="button" data-step="rounds" data-d="1" aria-label="More rounds">+</button></div>
+          </div>
+        </div>
+        <div class="summary" id="summary"></div>
+      </div>
+    </section>
+
+    <section>
+      <h3>Playback</h3>
+      <div class="panel">
+          <label for="gap">Pause between plays
+            <select id="gap"><option value="0" selected>None (continuous)</option><option value="1">1 second</option><option value="2">2 seconds</option><option value="3">3 seconds</option><option value="5">5 seconds</option></select>
+          </label>
+          <label for="reciter">Reciter
+            <select id="reciter">
+              <option value="Abdullah_Matroud_128kbps" selected>Abdullah Al-Matrood</option>
+              <option value="Alafasy_128kbps">Mishary Alafasy</option>
+              <option value="Husary_128kbps">Mahmoud Al-Husary</option>
+              <option value="Abdurrahmaan_As-Sudais_192kbps">Abdurrahman As-Sudais</option>
+              <option value="Abdul_Basit_Murattal_192kbps">Abdul Basit (Murattal)</option>
+              <option value="MaherAlMuaiqly128kbps">Maher Al-Muaiqly</option>
+              <option value="Minshawy_Murattal_128kbps">Al-Minshawi (Murattal)</option>
+              <option value="Saood_ash-Shuraym_128kbps">Saud Ash-Shuraym</option>
+              <option value="Salaah_AbdulRahman_Bukhatir_128kbps">Salah Bukhatir</option>
+            </select>
+          </label>
+        <label for="textSize">Text size
+          <select id="textSize"><option value="1.4rem">Small</option><option value="1.7rem" selected>Medium</option><option value="2.05rem">Large</option><option value="2.5rem">Extra large</option></select>
+        </label>
+      </div>
+    </section>
+
+    <p class="credits">Audio from <a href="https://everyayah.com" target="_blank" rel="noopener">everyayah.com</a> · text from <a href="https://alquran.cloud" target="_blank" rel="noopener">alquran.cloud</a></p>
+  </div>
+</div>
+
+<audio id="audioA" preload="auto"></audio>
+<audio id="audioB" preload="auto"></audio>
+
+<script>
+const SURAHS = [
+["Al-Fatihah",7],["Al-Baqarah",286],["Ali 'Imran",200],["An-Nisa",176],["Al-Ma'idah",120],["Al-An'am",165],["Al-A'raf",206],["Al-Anfal",75],["At-Tawbah",129],["Yunus",109],
+["Hud",123],["Yusuf",111],["Ar-Ra'd",43],["Ibrahim",52],["Al-Hijr",99],["An-Nahl",128],["Al-Isra",111],["Al-Kahf",110],["Maryam",98],["Ta-Ha",135],
+["Al-Anbiya",112],["Al-Hajj",78],["Al-Mu'minun",118],["An-Nur",64],["Al-Furqan",77],["Ash-Shu'ara",227],["An-Naml",93],["Al-Qasas",88],["Al-'Ankabut",69],["Ar-Rum",60],
+["Luqman",34],["As-Sajdah",30],["Al-Ahzab",73],["Saba",54],["Fatir",45],["Ya-Sin",83],["As-Saffat",182],["Sad",88],["Az-Zumar",75],["Ghafir",85],
+["Fussilat",54],["Ash-Shura",53],["Az-Zukhruf",89],["Ad-Dukhan",59],["Al-Jathiyah",37],["Al-Ahqaf",35],["Muhammad",38],["Al-Fath",29],["Al-Hujurat",18],["Qaf",45],
+["Adh-Dhariyat",60],["At-Tur",49],["An-Najm",62],["Al-Qamar",55],["Ar-Rahman",78],["Al-Waqi'ah",96],["Al-Hadid",29],["Al-Mujadilah",22],["Al-Hashr",24],["Al-Mumtahanah",13],
+["As-Saff",14],["Al-Jumu'ah",11],["Al-Munafiqun",11],["At-Taghabun",18],["At-Talaq",12],["At-Tahrim",12],["Al-Mulk",30],["Al-Qalam",52],["Al-Haqqah",52],["Al-Ma'arij",44],
+["Nuh",28],["Al-Jinn",28],["Al-Muzzammil",20],["Al-Muddaththir",56],["Al-Qiyamah",40],["Al-Insan",31],["Al-Mursalat",50],["An-Naba",40],["An-Nazi'at",46],["'Abasa",42],
+["At-Takwir",29],["Al-Infitar",19],["Al-Mutaffifin",36],["Al-Inshiqaq",25],["Al-Buruj",22],["At-Tariq",17],["Al-A'la",19],["Al-Ghashiyah",26],["Al-Fajr",30],["Al-Balad",20],
+["Ash-Shams",15],["Al-Layl",21],["Ad-Duha",11],["Ash-Sharh",8],["At-Tin",8],["Al-'Alaq",19],["Al-Qadr",5],["Al-Bayyinah",8],["Az-Zalzalah",8],["Al-'Adiyat",11],
+["Al-Qari'ah",11],["At-Takathur",8],["Al-'Asr",3],["Al-Humazah",9],["Al-Fil",5],["Quraysh",4],["Al-Ma'un",7],["Al-Kawthar",3],["Al-Kafirun",6],["An-Nasr",3],
+["Al-Masad",5],["Al-Ikhlas",4],["Al-Falaq",5],["An-Nas",6]
+];
+const $ = id => document.getElementById(id);
+const arNum = n => String(n).replace(/\d/g, d => "٠١٢٣٤٥٦٧٨٩"[d]);
+const pad = (n, w=3) => String(n).padStart(w, "0");
+const store = {
+  get(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+  set(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ---------- Settings UI ---------- */
+let ranges = store.get("hl.ranges") || [{s:2, from:10, to:25}];
+const surahOptions = SURAHS.map(([n,c],i)=>`<option value="${i+1}">${i+1}. ${n} (${c})</option>`).join("");
+
+function renderRanges(){
+  const box = $("ranges");
+  box.innerHTML = "";
+  ranges.forEach((r, idx) => {
+    const el = document.createElement("div");
+    el.className = "range";
+    el.innerHTML = `
+      <div class="range-fields">
+        <label class="full" for="s${idx}">Surah<select id="s${idx}">${surahOptions}</select></label>
+        <label for="f${idx}">From verse<input type="number" id="f${idx}" min="1" inputmode="numeric"></label>
+        <label for="t${idx}">To verse<input type="number" id="t${idx}" min="1" inputmode="numeric"></label>
+      </div>
+      <button class="remove" aria-label="Remove range" ${ranges.length===1?"hidden":""}>×</button>`;
+    box.appendChild(el);
+    const sel = el.querySelector("select"), f = el.querySelector(`#f${idx}`), t = el.querySelector(`#t${idx}`);
+    sel.value = r.s; f.value = r.from; t.value = r.to;
+    f.max = t.max = SURAHS[r.s-1][1];
+    sel.onchange = () => { r.s = +sel.value; r.from = 1; r.to = SURAHS[r.s-1][1]; renderRanges(); changed(true); };
+    f.onchange = () => { r.from = +f.value; fixRange(r); renderRanges(); changed(true); };
+    t.onchange = () => { r.to = +t.value; fixRange(r); renderRanges(); changed(true); };
+    el.querySelector(".remove").onclick = () => { ranges.splice(idx,1); renderRanges(); changed(true); };
+  });
+}
+function fixRange(r){
+  const max = SURAHS[r.s-1][1];
+  r.from = Math.min(Math.max(1, r.from||1), max);
+  r.to = Math.min(Math.max(1, r.to||max), max);
+  if (r.from > r.to) [r.from, r.to] = [r.to, r.from];
+}
+$("addRange").onclick = () => {
+  const last = ranges[ranges.length-1];
+  const s = Math.min(114, last.s + 1);
+  ranges.push({s, from:1, to:SURAHS[s-1][1]});
+  renderRanges(); changed(true);
+};
+document.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click", e => {
+  e.preventDefault();
+  const inp = $(b.dataset.step);
+  inp.value = Math.min(+inp.max, Math.max(+inp.min, (+inp.value||1) + +b.dataset.d));
+  changed(false);
+}));
+["perVerse","rounds"].forEach(id => {
+  $(id).addEventListener("input", () => { if ($(id).value !== "") changed(false, true); });
+  $(id).addEventListener("change", () => changed(false));
+});
+$("gap").addEventListener("change", () => changed(false));
+$("reciter").addEventListener("change", () => changed(true));
+
+const saved = store.get("hl.opts");
+if (saved){ for (const k of ["perVerse","rounds","gap","reciter"]) if (saved[k]!=null) $(k).value = saved[k]; }
+if (!store.get("hl.v2")){ $("gap").value = "0"; store.set("hl.v2", 1); }
+
+function opts(soft){
+  const clamp = (id) => { const i=$(id); const v=Math.min(+i.max, Math.max(1, Math.round(+i.value)||1)); if (!soft) i.value=v; return v; };
+  return { perVerse: clamp("perVerse"), rounds: clamp("rounds"), gap: +$("gap").value, reciter: $("reciter").value };
+}
+function buildList(){
+  const list = [];
+  ranges.forEach(r => { for (let a=r.from; a<=r.to; a++) list.push({s:r.s, a}); });
+  return list;
+}
+/* rangeChanged: what is recited changed (surah, verses, reciter).
+   Otherwise only repeat counts or the pause changed, which apply live. */
+function changed(rangeChanged, typing){
+  const o = opts(typing);
+  store.set("hl.ranges", ranges); store.set("hl.opts", o);
+  const newList = buildList();
+  const plays = newList.length * o.perVerse * o.rounds;
+  $("summary").innerHTML = `<b>${newList.length}</b> verse${newList.length===1?"":"s"} × <b>${o.perVerse}</b> each × <b>${o.rounds}</b> rounds = <b>${plays.toLocaleString()}</b> plays`;
+  if (!started){ resetState(); return; }
+  if (rangeChanged){
+    stopSession();
+    setStatus("Settings changed. Press play to start the new session.");
+    return;
+  }
+  // Repeat counts changed mid-session: keep going with the new numbers.
+  if (rep >= o.perVerse) rep = o.perVerse - 1;
+  if (round >= o.rounds) round = o.rounds - 1;
+  updateCounters();
+}
+function stopSession(){
+  clearTimeout(gapTimer); cur.pause(); nxt.pause(); setPlaying(false); resetState();
+}
+
+/* ---------- Playback state ---------- */
+let list = [], i = 0, rep = 0, round = 0, playing = false, started = false, gapTimer = null;
+const O = () => opts(true);
+function urlFor(v){ return `https://everyayah.com/data/${O().reciter}/${pad(v.s)}${pad(v.a)}.mp3`; }
+
+/* ---------- Verses page ---------- */
+const BISMILLAH = "بِسْمِ ٱللَّهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ";
+const plain = t => t.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g,"").replace(/\u0671/g,"\u0627");
+const surahText = {};          // surah number -> {ayahNumber: text}
+const surahLoading = {};
+let ayahEls = [];              // list index -> span
+
+function loadSurahText(s){
+  if (surahText[s] || surahLoading[s]) return;
+  surahLoading[s] = fetch(`https://api.alquran.cloud/v1/surah/${s}/quran-uthmani`)
+    .then(r => r.json())
+    .then(j => {
+      const map = {};
+      j.data.ayahs.forEach(a => {
+        let t = a.text;
+        if (a.numberInSurah === 1 && s !== 1 && s !== 9) {
+          const w = t.split(/\s+/);
+          if (w.length > 4 && plain(w.slice(0,4).join(" ")) === "بسم الله الرحمن الرحيم") t = w.slice(4).join(" ");
+        }
+        map[a.numberInSurah] = t;
+      });
+      surahText[s] = map;
+      fillText();
+    })
+    .catch(() => { delete surahLoading[s]; setStatus("Couldn't load the verse text. The audio still works.", false); });
+}
+function fillText(){
+  ayahEls.forEach((el, k) => {
+    const v = list[k], map = surahText[v.s];
+    if (map && map[v.a] && el.classList.contains("loading")){
+      el.classList.remove("loading");
+      const t=el.querySelector(".t"); t.innerHTML=""; map[v.a].split(/\s+/).forEach((w,n)=>{ const x=document.createElement("span"); x.className="word"; x.dataset.w=n; x.textContent=w; t.appendChild(x); t.appendChild(document.createTextNode(" ")); });
+    }
+  });
+}
+function renderVerses(){
+  const box = $("verses");
+  box.innerHTML = "";
+  ayahEls = [];
+  let block = null, para = null, lastS = null, prevA = null;
+  list.forEach((v, k) => {
+    if (v.s !== lastS || (prevA !== null && v.a !== prevA + 1)){
+      block = document.createElement("article");
+      block.className = "surah";
+      const r = list.filter(x => x.s === v.s);
+      block.innerHTML = `<h2 class="surah-head">${SURAHS[v.s-1][0]}</h2>
+        <div class="surah-sub">Surah ${v.s} · verses ${v.a}–${lastInRun(k)}</div>` +
+        (v.a === 1 && v.s !== 1 && v.s !== 9 ? `<div class="bism">${BISMILLAH}</div>` : "");
+      para = document.createElement("p");
+      para.className = "mushaf";
+      block.appendChild(para);
+      box.appendChild(block);
+      lastS = v.s;
+    }
+    const sp = document.createElement("span");
+    sp.className = "ayah loading";
+    sp.tabIndex = 0;
+    sp.setAttribute("role", "button");
+    sp.setAttribute("aria-label", `Play verse ${v.a}`);
+    sp.innerHTML = `<span class="t">…</span> <span class="num">﴿${arNum(v.a)}﴾</span> `;
+    sp.addEventListener("click", () => jumpTo(k));
+    sp.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " "){ e.preventDefault(); jumpTo(k); } });
+    para.appendChild(sp);
+    para.appendChild(document.createTextNode(" "));
+    ayahEls.push(sp);
+    prevA = v.a;
+  });
+  const hint = document.createElement("p");
+  hint.className = "hint";
+  hint.textContent = "Tap any verse to start from it.";
+  box.appendChild(hint);
+  [...new Set(list.map(v => v.s))].forEach(loadSurahText);
+  fillText();
+}
+function lastInRun(k){
+  let j = k;
+  while (j + 1 < list.length && list[j+1].s === list[k].s && list[j+1].a === list[j].a + 1) j++;
+  return list[j].a;
+}
+
+/* Follow the current verse, unless the reader has just scrolled away on purpose */
+let userScrollAt = 0;
+["touchmove","wheel"].forEach(ev => window.addEventListener(ev, () => { userScrollAt = Date.now(); }, {passive:true}));
+const reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+let lastHl = -1;
+function highlight(){
+  if (lastHl >= 0 && ayahEls[lastHl]) ayahEls[lastHl].classList.remove("cur");
+  lastHl = started ? i : -1;
+  const el = started ? ayahEls[i] : null;
+  if (!el) return;
+  el.classList.add("cur");
+  if (Date.now() - userScrollAt > 4000){
+    el.scrollIntoView({block:"center", behavior: reduceMotion ? "auto" : "smooth"});
+  }
+}
+
+function resetState(){
+  list = buildList(); i = 0; rep = 0; round = 0; started = false;
+  renderVerses();
+  showVerse();
+}
+function showVerse(){
+  const o = O(), v = list[i]; if (!v) return;
+  $("where").textContent = `${SURAHS[v.s-1][0]} · ${rangeLabel()}`;
+  $("nowLabel").textContent = started ? `${SURAHS[v.s-1][0]} ${v.s}:${v.a}` : `Ready · ${list.length} verse${list.length===1?"":"s"}`;
+  updateCounters();
+  highlight();
+  if ("mediaSession" in navigator && started){
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: `${SURAHS[v.s-1][0]} ${v.s}:${v.a}`,
+      artist: $("reciter").selectedOptions[0].textContent,
+      album: `Round ${round+1} of ${o.rounds} · repeat ${rep+1} of ${o.perVerse}`
+    });
+  }
+}
+function updateCounters(){
+  const o = opts(true);
+  $("cVerse").textContent = `${started?rep+1:0} / ${o.perVerse}`;
+  $("cRound").textContent = `${started?round+1:0} / ${o.rounds}`;
+  const total = Math.max(1, list.length * o.perVerse * o.rounds);
+  const done = ((round*list.length + i) * o.perVerse + rep);
+  $("progress").style.width = started ? `${Math.min(100, done/total*100).toFixed(2)}%` : "0";
+}
+function rangeLabel(){
+  return ranges.map(r => ranges.length===1 ? `${r.from}–${r.to}` : `${r.s}:${r.from}–${r.to}`).join(", ");
+}
+
+/* ---------- Settings sheet ---------- */
+function openSettings(){ $("sheetBack").hidden = false; document.body.style.overflow = "hidden"; $("closeSettings").focus(); }
+function closeSettings(){ $("sheetBack").hidden = true; document.body.style.overflow = ""; $("openSettings").focus(); highlight(); }
+$("openSettings").onclick = openSettings;
+$("closeSettings").onclick = closeSettings;
+$("sheetBack").addEventListener("click", e => { if (e.target === $("sheetBack")) closeSettings(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheetBack").hidden) closeSettings(); });
+function applyTextSize(){ document.documentElement.style.setProperty("--ar-size", $("textSize").value); }
+$("textSize").value = store.get("hl.textSize") || "1.7rem";
+applyTextSize();
+$("textSize").addEventListener("change", () => { store.set("hl.textSize", $("textSize").value); applyTextSize(); });
+
+/* Two audio players take turns: while one recites, the other has the
+   next verse already loaded, so it starts the instant the first ends. */
+let cur = $("audioA"), nxt = $("audioB");
+function prepare(el, v){
+  if (!v) return;
+  const src = urlFor(v);
+  if (el.dataset.src !== src){ el.dataset.src = src; el.src = src; el.load(); }
+}
+function peekNext(){
+  const o = O();
+  let r = rep + 1, k = i, rd = round;
+  if (r >= o.perVerse){ r = 0; k++; if (k >= list.length){ k = 0; rd++; if (rd >= o.rounds) return null; } }
+  return list[k];
+}
+function loadAndPlay(){
+  const v = list[i], src = urlFor(v);
+  setStatus("");
+  clearTimeout(gapTimer);
+  if (cur.dataset.src !== src && nxt.dataset.src === src){
+    cur.pause();
+    [cur, nxt] = [nxt, cur];            // the other player already has this verse loaded
+  } else {
+    prepare(cur, v);
+  }
+  try{ cur.currentTime = 0; }catch(e){}
+  showVerse(true);
+  cur.play().catch(err => {
+    if (err.name === "AbortError") return;
+    setStatus("Tap play to continue.", false); setPlaying(false);
+  });
+  prepare(nxt, peekNext());              // load the next verse in the background now
+}
+function advance(){
+  const o = O();
+  rep++;
+  if (rep >= o.perVerse){
+    rep = 0; i++;
+    if (i >= list.length){
+      i = 0; round++;
+      if (round >= o.rounds){ finish(); return; }
+    }
+  }
+  loadAndPlay();
+}
+function finish(){
+  setPlaying(false); started = false;
+  const o = O();
+  $("progress").style.width = "100%";
+  $("cRound").textContent = `${o.rounds} / ${o.rounds}`;
+  setStatus(`Done — ${rangeLabel()} completed ${o.rounds} times. بارك الله فيك`, false);
+  i = 0; rep = 0; round = 0;
+}
+[$("audioA"), $("audioB")].forEach(el => {
+  el.addEventListener("ended", () => {
+    if (el !== cur || !playing) return;
+    const g = O().gap;
+    if (g > 0){ gapTimer = setTimeout(advance, g*1000); } else advance();
+  });
+  el.addEventListener("error", () => {
+    if (el !== cur || !playing) return;
+    const v = list[i];
+    setStatus(`Couldn't load ${v.s}:${v.a}. Check your connection, then press play.`, true);
+    setPlaying(false);
+  });
+  el.addEventListener("waiting", () => { if (el === cur && playing) setStatus("Loading…"); });
+  el.addEventListener("playing", () => { if (el === cur) setStatus(""); });
+});
+
+function setStatus(msg, err=false){ const s=$("status"); s.textContent=msg; s.className = "status" + (err?" err":""); }
+function setPlaying(p){
+  playing = p;
+  $("btnPlay").setAttribute("aria-label", p ? "Pause" : "Play");
+  $("playIcon").innerHTML = p ? '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>' : '<path d="M8 5v14l11-7z"/>';
+  if ("mediaSession" in navigator) navigator.mediaSession.playbackState = p ? "playing" : "paused";
+  if (p) requestWake(); else releaseWake();
+}
+/* Phones only let audio start from a tap, so on the first tap we briefly
+   start and stop the second player too; after that it can take over by itself. */
+let unlocked = false;
+function unlockSecondPlayer(){
+  if (unlocked) return; unlocked = true;
+  const other = nxt;
+  if (!other.src) return;
+  other.muted = true;
+  const p = other.play();
+  if (p && p.then) p.then(() => { other.pause(); other.currentTime = 0; other.muted = false; })
+                   .catch(() => { other.muted = false; });
+  else { other.pause(); other.muted = false; }
+}
+function play(){
+  if (!started){
+    list = buildList(); if (!list.length) return;
+    i = 0; rep = 0; round = 0; started = true; setPlaying(true);
+    loadAndPlay(); unlockSecondPlayer(); return;
+  }
+  setPlaying(true);
+  if (cur.ended || !cur.src) loadAndPlay();
+  else cur.play().catch(()=>setPlaying(false));
+  unlockSecondPlayer();
+}
+function pause(){ clearTimeout(gapTimer); cur.pause(); setPlaying(false); }
+function jump(d){ if (!list.length) return; jumpTo((i + d + list.length) % list.length); }
+function jumpTo(k){
+  clearTimeout(gapTimer);
+  if (!started){ list = buildList(); started = true; round = 0; }
+  i = k; rep = 0;
+  if (!playing){ setPlaying(true); }
+  loadAndPlay(); unlockSecondPlayer();
+}
+$("btnPlay").onclick = () => { if(reciteOn) stopRecite(); playing ? pause() : play(); };
+$("btnPrev").onclick = () => jump(-1);
+$("btnNext").onclick = () => jump(1);
+if ("mediaSession" in navigator){
+  const ms = navigator.mediaSession;
+  try{
+    ms.setActionHandler("play", play);
+    ms.setActionHandler("pause", pause);
+    ms.setActionHandler("previoustrack", () => jump(-1));
+    ms.setActionHandler("nexttrack", () => jump(1));
+  }catch(e){}
+}
+
+
+/* ---------- Recite & Check — Qur'an-specific ASR ---------- */
+let reciteOn=false,reciteIndex=0,recitePos=0,helping=false,correctionLock=false,mismatchEvidence=0;
+let qPipe=null,qModelPromise=null,qStream=null,qRecorder=null,qChunks=[],qBusy=false,qTimer=null,qSession=0,qLastNorm='',qLastAt=0;
+function normAr(t){return(t||'').normalize('NFKD').replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g,'').replace(/[أإآٱ]/g,'ا').replace(/ى/g,'ي').replace(/ؤ/g,'و').replace(/ئ/g,'ي').replace(/ة/g,'ه').replace(/[^\u0621-\u064A\s]/g,' ').replace(/\s+/g,' ').trim()}
+function distance1(a,b){if(a===b)return true;if(Math.abs(a.length-b.length)>1)return false;let i=0,j=0,d=0;while(i<a.length&&j<b.length){if(a[i]===b[j]){i++;j++;continue}if(++d>1)return false;if(a.length>b.length)i++;else if(b.length>a.length)j++;else{i++;j++}}return d+(i<a.length||j<b.length?1:0)<=1}
+function closeWord(a,b){a=normAr(a);b=normAr(b);return!!a&&!!b&&(a===b||(Math.min(a.length,b.length)>=5&&distance1(a,b)))}
+function wordsAt(k){const v=list[k],t=v&&surahText[v.s]&&surahText[v.s][v.a];return t?t.split(/\s+/):[]}
+function wordEls(k){return ayahEls[k]?[...ayahEls[k].querySelectorAll('.word')]:[]}
+function clearMarks(){document.querySelectorAll('.word.missed').forEach(x=>x.classList.remove('missed'))}
+function clearTracking(){document.querySelectorAll('.word.tracking').forEach(x=>x.classList.remove('tracking'))}
+function markProgress(){clearTracking();wordEls(reciteIndex).forEach((x,n)=>{x.classList.toggle('recited',n<recitePos);if(n===recitePos)x.classList.add('tracking')})}
+function markMissed(pos){const x=wordEls(reciteIndex)[pos];if(x){x.classList.add('missed');x.scrollIntoView({block:'center',behavior:reduceMotion?'auto':'smooth'})}}
+function resetRecognitionState(){correctionLock=false;mismatchEvidence=0;qLastNorm='';qLastAt=0}
+function setReciteTarget(k,pos=0){clearMarks();reciteIndex=k;recitePos=pos;resetRecognitionState();i=k;started=true;showVerse();markProgress();const v=list[k];$('nowLabel').textContent=`Reciting · ${SURAHS[v.s-1][0]} ${v.s}:${v.a}`}
+function nextReciteAyah(){clearMarks();clearTracking();if(reciteIndex+1>=list.length){stopRecite(false);$('progress').style.width='100%';setStatus('Recitation complete — selected range finished. بارك الله فيك');return}setReciteTarget(reciteIndex+1,0);setStatus('Good — next ayah.')}
+function advanceOne(){clearMarks();correctionLock=false;mismatchEvidence=0;recitePos++;markProgress();if(recitePos>=wordsAt(reciteIndex).length)nextReciteAyah()}
+function lockCurrentWord(){if(correctionLock)return;correctionLock=true;markMissed(recitePos);setStatus('You missed the red word. Say it to continue.',true)}
+function alignQuranText(text){const ws=wordsAt(reciteIndex);if(!ws.length||recitePos>=ws.length)return;const norm=normAr(text);if(!norm)return;const now=Date.now();if(norm===qLastNorm&&now-qLastAt<1600)return;qLastNorm=norm;qLastAt=now;const got=norm.split(/\s+/).filter(Boolean);if(correctionLock){if(got.some(t=>closeWord(t,ws[recitePos]))){setStatus('Correct — keep going.');advanceOne()}return}let start=-1;for(let g=0;g<got.length;g++)if(closeWord(got[g],ws[recitePos])){start=g;break}if(start>=0){mismatchEvidence=0;let g=start;while(g<got.length&&recitePos<ws.length&&closeWord(got[g],ws[recitePos])){recitePos++;g++;markProgress();if(recitePos>=ws.length){nextReciteAyah();return}}setStatus('Listening — keep going.');return}let later=false;for(let n=recitePos+1;n<Math.min(ws.length,recitePos+4)&&!later;n++)later=got.some(t=>closeWord(t,ws[n]));mismatchEvidence+=later?2:1;if(mismatchEvidence>=2)lockCurrentWord()}
+async function loadQuranModel(){if(qPipe)return qPipe;if(qModelPromise)return qModelPromise;qModelPromise=(async()=>{setStatus('Loading Qur’an recognition model…');const{pipeline}=await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0');qPipe=await pipeline('automatic-speech-recognition','Sharjeelbaig/whisper-tiny-ar-quran-onnx',{dtype:'q8',progress_callback:p=>{if(reciteOn&&p.status==='progress'&&p.progress!=null)setStatus(`Loading Qur’an model… ${Math.round(p.progress)}%`)}});return qPipe})();try{return await qModelPromise}finally{qModelPromise=null}}
+async function blobTo16kPCM(blob){const ab=await blob.arrayBuffer(),AC=window.AudioContext||window.webkitAudioContext,ac=new AC();let b;try{b=await ac.decodeAudioData(ab.slice(0))}finally{try{await ac.close()}catch(e){}}const off=new OfflineAudioContext(1,Math.max(1,Math.ceil(b.duration*16000)),16000),src=off.createBufferSource();src.buffer=b;src.connect(off.destination);src.start();const rr=await off.startRendering();return rr.getChannelData(0)}
+async function recognizeChunk(blob,session){if(!reciteOn||helping||session!==qSession||qBusy||!blob||blob.size<800)return;qBusy=true;try{const pcm=await blobTo16kPCM(blob);let peak=0;for(const v of pcm)peak=Math.max(peak,Math.abs(v));if(peak<.003)return;setStatus(correctionLock?'Checking the red word…':'Checking recitation…');const o=await qPipe(pcm,{language:'ar',task:'transcribe',return_timestamps:'word'});if(reciteOn&&!helping&&session===qSession)alignQuranText((o.text||'').trim())}catch(e){console.error(e);if(reciteOn&&session===qSession)setStatus('Recognition had a problem. Keep reciting or restart checking.',true)}finally{qBusy=false}}
+function beginWindow(session){if(!reciteOn||helping||session!==qSession||!qStream)return;qChunks=[];let r;try{r=new MediaRecorder(qStream)}catch(e){setStatus('This browser could not start audio recording.',true);return}qRecorder=r;r.ondataavailable=e=>{if(e.data.size)qChunks.push(e.data)};r.onstop=()=>{const c=qChunks.slice();qChunks=[];if(c.length)recognizeChunk(new Blob(c,{type:r.mimeType}),session)};r.start(250)}
+async function startRollingMic(){if(!reciteOn||helping)return;stopRollingMic();qStream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});const session=++qSession;beginWindow(session);qTimer=setInterval(()=>{if(!reciteOn||helping||session!==qSession)return;if(qRecorder&&qRecorder.state==='recording'){try{qRecorder.stop()}catch(e){}setTimeout(()=>beginWindow(session),90)}},3200)}
+function stopRollingMic(){clearInterval(qTimer);qTimer=null;qSession++;if(qRecorder&&qRecorder.state==='recording'){try{qRecorder.onstop=null;qRecorder.stop()}catch(e){}}qRecorder=null;qChunks=[];if(qStream){qStream.getTracks().forEach(t=>t.stop());qStream=null}}
+async function startRecite(){if(!navigator.mediaDevices?.getUserMedia){setStatus('Recite & Check needs microphone access on the HTTPS Hifz Loop page.',true);return}pause();list=buildList();renderVerses();const begin=async()=>{if(!wordsAt(0).length){setStatus('Loading Qur’an text… tap Recite & Check again in a moment.');return}reciteOn=true;document.body.classList.add('recite-mode');$('btnRecite').classList.add('active');$('btnRecite').textContent='■ Stop checking';$('btnHelp').hidden=false;setReciteTarget(0,0);try{await loadQuranModel();if(!reciteOn)return;setStatus('Qur’an model ready — listening.');await startRollingMic()}catch(e){console.error(e);setStatus(e&&e.name==='NotAllowedError'?'Microphone permission was denied. Allow the microphone and try again.':'Couldn’t start Qur’an recognition. Check your connection and try again.',true);stopRecite(false)}};if(wordsAt(0).length)begin();else setTimeout(begin,900)}
+function stopRecite(clear=true){reciteOn=false;helping=false;stopRollingMic();document.body.classList.remove('recite-mode');clearTracking();$('btnRecite').classList.remove('active');$('btnRecite').textContent='🎙 Recite & Check';$('btnHelp').hidden=true;$('btnHelp').disabled=false;if(clear){clearMarks();document.querySelectorAll('.word.recited').forEach(x=>x.classList.remove('recited'));setStatus('')}}
+$('btnRecite').onclick=()=>reciteOn?stopRecite():startRecite();
+$('btnHelp').onclick=async()=>{if(!reciteOn||helping)return;helping=true;$('btnHelp').disabled=true;stopRollingMic();setStatus('Playing the current ayah…');const v=list[reciteIndex],a=new Audio(urlFor(v));const resume=async()=>{if(!helping)return;helping=false;$('btnHelp').disabled=false;if(reciteOn){try{await startRollingMic();setStatus(correctionLock?'Say the red word to continue.':'Listening — keep going.')}catch(e){setStatus('Couldn’t restart the microphone.',true)}}};a.onended=resume;a.onerror=()=>{setStatus('Couldn’t play the help audio.',true);resume()};try{await a.play()}catch(e){setStatus('Tap Help me again to play the ayah.',true);resume()}};
+
+/* Keep screen awake while playing (optional) */
+let wake = null;
+async function requestWake(){ try{ if ("wakeLock" in navigator && !wake) wake = await navigator.wakeLock.request("screen"); wake && wake.addEventListener("release", ()=>wake=null); }catch(e){} }
+function releaseWake(){ try{ wake && wake.release(); }catch(e){} wake = null; }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState==="visible" && playing) requestWake(); });
+
+renderRanges();
+changed();
+</script>
+</body>
+</html>
